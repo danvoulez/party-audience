@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "party-audience",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-07-01",
+  "assets": {
+    "directory": "./public"
+  }
+  // TV_SOURCE é definida por ambiente:
+  //  - dev local: arquivo .dev.vars (ver .dev.vars.example) ou --var na CLI;
+  //  - produção: `wrangler secret put TV_SOURCE` ou vars no dashboard.
+  // O formato do JSON está documentado em docs/tv-partner-contract.md.
+}

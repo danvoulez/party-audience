@@ -1,0 +1,32 @@
+{
+  "name": "party-audience",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Plataforma de vídeo social — MVP. Etapa 1: homepage pública com TV 24h externa.",
+  "scripts": {
+    "build:client": "node scripts/build-client.mjs",
+    "dev": "npm run build:client && wrangler dev",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test e2e scripts",
+    "test": "npm run build:client && vitest run",
+    "test:e2e": "npm run build:client && playwright test",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run test:e2e",
+    "deploy": "npm run build:client && wrangler deploy"
+  },
+  "dependencies": {
+    "hls.js": "^1.6.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^26.1.1",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.30.0",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.35.0",
+    "vitest": "^3.2.0",
+    "wrangler": "^4.20.0"
+  }
+}

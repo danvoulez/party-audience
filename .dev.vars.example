@@ -1,0 +1,12 @@
+# Copie para .dev.vars e preencha com a fonte real da TV do parceiro.
+# Formato completo em docs/tv-partner-contract.md. Exemplos:
+#
+# HLS (demo pública para validar o player — NÃO é a TV do parceiro):
+# TV_SOURCE={"kind":"hls","url":"https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"}
+#
+# Iframe do parceiro:
+# TV_SOURCE={"kind":"iframe","embedUrl":"https://player.parceiro.tv/embed/canal24h"}
+#
+# Cloudflare Stream:
+# TV_SOURCE={"kind":"cloudflare_stream","customerSubdomain":"customer-abc123","videoId":"31c9291ab41fac05471db4e73aa11717"}
+TV_SOURCE=

@@ -1,0 +1,13 @@
+node_modules/
+.wrangler/
+.dev.vars
+
+# Artefatos de build do cliente (gerados por npm run build:client)
+public/player.js
+public/player.js.map
+public/hls-*.js
+public/hls-*.js.map
+
+# Saídas de teste
+test-results/
+playwright-report/
