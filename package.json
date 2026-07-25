@@ -16,7 +16,8 @@
     "report:vitest": "npm run build:client && vitest run --reporter=json --outputFile=reports/vitest.json --reporter=default",
     "report:e2e": "npm run build:client && PLAYWRIGHT_JSON_OUTPUT_NAME=reports/playwright.json playwright test --reporter=json,list",
     "verify": "npm run typecheck && npm run lint && npm run check:integrity && npm run report:vitest && npm run report:e2e && npm run check:promises",
-    "deploy": "npm run build:client && wrangler deploy"
+    "deploy": "node scripts/deploy.mjs",
+    "deploy:check": "node scripts/deploy.mjs --dry-run"
   },
   "dependencies": {
     "hls.js": "^1.6.0",

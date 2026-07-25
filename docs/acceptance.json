@@ -33,7 +33,7 @@
       "etapa": 0,
       "criterio": "A transmissão do parceiro reproduz continuamente em desktop e mobile.",
       "status": "pending",
-      "nota": "Depende do contrato da Etapa 0, que segue aberto: não há URL nem credencial real. Só um teste prolongado com o sinal do parceiro fecha isto.",
+      "nota": "NÃO TEM fonte de TV ainda — não há parceiro nem sinal. O encaixe está pronto: TV_SOURCE é uma variável, e definir ela liga a TV sem deploy de código. A homepage sobe em 'não configurada' até lá, que é o estado projetado. Fecha quando houver sinal real e um teste prolongado nele.",
       "verified_by": []
     },
 
