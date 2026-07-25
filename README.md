@@ -66,6 +66,13 @@ não existirem.
 ## Deploy
 
 ```bash
+# Provisiona o App/presets na API real (idempotente).
+export CLOUDFLARE_ACCOUNT_ID="..."
+export CLOUDFLARE_API_TOKEN="..."
+export REALTIMEKIT_APP_ID="..." # opcional; cria/reusa party-audience-production quando ausente
+npm run provision:media
+
+# Instala as mesmas credenciais no Worker.
 npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
 npx wrangler secret put REALTIMEKIT_APP_ID
 npx wrangler secret put CLOUDFLARE_API_TOKEN
