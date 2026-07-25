@@ -14,5 +14,12 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
     },
   },
-  { ignores: ["node_modules", "public", ".wrangler", "test-results", "playwright-report"] },
+  {
+    // Scripts de build e de verificação rodam no Node, fora do Worker.
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: { console: "readonly", process: "readonly" },
+    },
+  },
+  { ignores: ["node_modules", "public", ".wrangler", "test-results", "playwright-report", "reports"] },
 );

@@ -1,0 +1,336 @@
+{
+  "_leia_isto": [
+    "Inventário das promessas do plano (Etapas 0 a 6), em forma legível por máquina.",
+    "Não é documentação: scripts/check-promises.mjs valida cada linha contra o",
+    "resultado real dos testes e falha o CI quando este arquivo mente.",
+    "",
+    "status:verified  exige que TODOS os testes em verified_by existam e passem.",
+    "                 Se um teste for renomeado ou apagado, o CI quebra — cobertura",
+    "                 não se perde em silêncio.",
+    "status:pending   exige verified_by vazio. É uma promessa do plano que o código",
+    "                 ainda NÃO cumpre. Aparece no resumo do CI a cada execução.",
+    "",
+    "Promover pending -> verified sem teste real é exatamente o que o CI impede.",
+    "",
+    "Prefixos em verified_by: 'vitest::' usa o nome completo do teste",
+    "(describe + it); 'e2e::' usa o título do teste Playwright."
+  ],
+
+  "promises": [
+    {
+      "id": "e0.falha-vira-estado-controlado",
+      "etapa": 0,
+      "criterio": "Uma falha do sinal gera estado controlado em vez de página quebrada.",
+      "status": "verified",
+      "verified_by": [
+        "e2e::fluxo de falha: HLS fora do ar mostra loading e depois o fallback",
+        "vitest::resolvePlayback fonte ausente vira unavailable/unconfigured",
+        "vitest::GET / TV_SOURCE inválida degrada para indisponível em vez de erro 500"
+      ]
+    },
+    {
+      "id": "e0.sinal-real-continuo",
+      "etapa": 0,
+      "criterio": "A transmissão do parceiro reproduz continuamente em desktop e mobile.",
+      "status": "pending",
+      "nota": "Depende do contrato da Etapa 0, que segue aberto: não há URL nem credencial real. Só um teste prolongado com o sinal do parceiro fecha isto.",
+      "verified_by": []
+    },
+
+    {
+      "id": "e1.anonimo-sem-permissao",
+      "etapa": 1,
+      "criterio": "Visitante anônimo abre a homepage e assiste sem receber pedido de câmera, microfone ou login.",
+      "status": "verified",
+      "verified_by": [
+        "e2e::TV não configurada: página funciona e mostra indisponibilidade honesta",
+        "e2e::links do cabeçalho levam aos formulários reais de login e cadastro",
+        "vitest::GET / não expõe a configuração bruta nem pede câmera/microfone",
+        "vitest::GET / serve a homepage sem autenticação, com player e fonte HLS resolvida"
+      ]
+    },
+    {
+      "id": "e1.player-responsivo",
+      "etapa": 1,
+      "criterio": "O player é responsivo em viewport mobile e desktop.",
+      "status": "verified",
+      "verified_by": ["e2e::layout responde a viewports mobile e desktop"]
+    },
+    {
+      "id": "e1.fallback-com-conteudo",
+      "etapa": 1,
+      "criterio": "O fallback mostra conteúdo real, não um elemento vazio.",
+      "status": "verified",
+      "verified_by": [
+        "vitest::GET / overlays de loading e indisponibilidade têm conteúdo real, não elementos vazios",
+        "vitest::GET / sem TV_SOURCE renderiza estado indisponível sem quebrar a página"
+      ]
+    },
+    {
+      "id": "e1.som-so-com-gesto",
+      "etapa": 1,
+      "criterio": "A reprodução inicia silenciada e o som só liga por gesto do usuário.",
+      "status": "pending",
+      "nota": "Verificado apenas no modo iframe, onde o botão de som fica escondido porque o controle é do parceiro. No caminho HLS não existe teste de que o vídeo inicia mudo nem de que o botão religa o som.",
+      "verified_by": []
+    },
+    {
+      "id": "e1.metricas-de-reproducao",
+      "etapa": 1,
+      "criterio": "Eventos de reprodução são coletados e entradas inválidas são recusadas.",
+      "status": "verified",
+      "verified_by": [
+        "vitest::POST /api/events aceita evento de reprodução válido",
+        "vitest::POST /api/events rejeita evento com tipo desconhecido",
+        "vitest::POST /api/events rejeita JSON inválido e payload gigante"
+      ]
+    },
+
+    {
+      "id": "e2.cadastro-reserva-canal",
+      "etapa": 2,
+      "criterio": "O cadastro cria o usuário e reserva o canal dominio.com/username.",
+      "status": "verified",
+      "verified_by": [
+        "vitest::Etapa 2 — identidade e slug cadastro cria usuário e reserva o canal /<username>",
+        "vitest::Etapa 2 — identidade e slug username duplicado é recusado"
+      ]
+    },
+    {
+      "id": "e2.slugs-reservados",
+      "etapa": 2,
+      "criterio": "Palavras reservadas do sistema não podem virar username.",
+      "status": "verified",
+      "verified_by": ["vitest::Etapa 2 — identidade e slug slugs reservados do sistema não viram username"]
+    },
+    {
+      "id": "e2.credenciais-nao-vazam",
+      "etapa": 2,
+      "criterio": "Senha errada não autentica e a resposta não revela se o usuário existe.",
+      "status": "verified",
+      "verified_by": [
+        "vitest::Etapa 2 — identidade e slug senha errada não autentica e não vaza se o usuário existe",
+        "vitest::Etapa 2 — identidade e slug requisição sem sessão não acessa a API autenticada"
+      ]
+    },
+    {
+      "id": "e2.teste-de-dispositivos",
+      "etapa": 2,
+      "criterio": "O usuário testa câmera e microfone no lobby antes de entrar.",
+      "status": "pending",
+      "nota": "A tela existe (src/client/lobby.ts) mas nenhum teste cobre o fluxo.",
+      "verified_by": []
+    },
+    {
+      "id": "e2.camera-nao-liga-sozinha",
+      "etapa": 2,
+      "criterio": "A câmera não é ativada sem gesto explícito do usuário no lobby.",
+      "status": "pending",
+      "nota": "É o critério de aceite literal da Etapa 2 e o de maior consequência: hoje só a homepage tem sonda de getUserMedia. O lobby, que é justamente onde a câmera pode ligar, não tem e2e.",
+      "verified_by": []
+    },
+    {
+      "id": "e2.perfil-publico",
+      "etapa": 2,
+      "criterio": "Cada usuário tem um perfil público.",
+      "status": "pending",
+      "nota": "Não implementado.",
+      "verified_by": []
+    },
+
+    {
+      "id": "e3.admin-e-participantes",
+      "etapa": 3,
+      "criterio": "A festa tem um administrador e demais participantes.",
+      "status": "verified",
+      "verified_by": ["vitest::Etapa 3 — festa o primeiro a entrar é admin; os seguintes são participantes"]
+    },
+    {
+      "id": "e3.moderacao-restrita",
+      "etapa": 3,
+      "criterio": "Só quem tem permissão de moderar consegue moderar.",
+      "status": "verified",
+      "verified_by": ["vitest::Etapa 3 — festa participante sem moderação não consegue expulsar ninguém"]
+    },
+    {
+      "id": "e3.participacao-equivalente",
+      "etapa": 3,
+      "criterio": "O administrador modera sem impedir que os demais tenham participação equivalente.",
+      "status": "verified",
+      "verified_by": ["vitest::Etapa 3 — festa participantes têm as mesmas permissões de fala do admin"]
+    },
+    {
+      "id": "e3.chat-da-festa",
+      "etapa": 3,
+      "criterio": "Participantes conversam por chat, com limite de flood.",
+      "status": "pending",
+      "nota": "SessionRoom (o Durable Object que implementa presença e chat) não tem nenhum teste. Rate limit e histórico são código não verificado.",
+      "verified_by": []
+    },
+    {
+      "id": "e3.compartilhamento-de-tela",
+      "etapa": 3,
+      "criterio": "Participantes compartilham tela.",
+      "status": "pending",
+      "nota": "Não implementado.",
+      "verified_by": []
+    },
+    {
+      "id": "e3.reconexao",
+      "etapa": 3,
+      "criterio": "Uma queda de conexão reconecta o participante à festa.",
+      "status": "pending",
+      "nota": "Não implementado.",
+      "verified_by": []
+    },
+
+    {
+      "id": "e4.nenhum-terceiro-alcanca-a-chamada",
+      "etapa": 4,
+      "criterio": "Nenhum terceiro consegue entrar, visualizar ou receber áudio, vídeo ou texto da chamada privada.",
+      "status": "verified",
+      "verified_by": [
+        "vitest::Etapa 4 — chamada privada nenhum terceiro lê, aceita ou encerra a chamada — nem antes nem depois do aceite",
+        "vitest::Etapa 4 — chamada privada a sala da chamada só tem os dois participantes"
+      ]
+    },
+    {
+      "id": "e4.suspensao-de-midia-na-festa",
+      "etapa": 4,
+      "criterio": "Aceitar a chamada suspende a mídia na festa apenas de quem está na chamada.",
+      "status": "verified",
+      "verified_by": ["vitest::Etapa 4 — chamada privada aceitar a chamada suspende a mídia na festa só de quem está na chamada"]
+    },
+    {
+      "id": "e4.retomada-explicita",
+      "etapa": 4,
+      "criterio": "Ao voltar à festa, câmera e microfone não religam sem confirmação explícita.",
+      "status": "verified",
+      "verified_by": ["vitest::Etapa 4 — chamada privada a mídia da festa não religa sozinha ao encerrar: exige retomada explícita"]
+    },
+    {
+      "id": "e4.bloqueios",
+      "etapa": 4,
+      "criterio": "Bloqueios são respeitados antes da criação da chamada, nos dois sentidos.",
+      "status": "verified",
+      "verified_by": [
+        "vitest::Etapa 4 — chamada privada bloqueio impede a criação da chamada nos dois sentidos",
+        "vitest::Etapa 4 — chamada privada não é possível ligar para si mesmo"
+      ]
+    },
+    {
+      "id": "e4.timeout-do-convite",
+      "etapa": 4,
+      "criterio": "Um convite não atendido expira por tempo.",
+      "status": "pending",
+      "nota": "A expiração existe no código (expires_at + transição para 'expired') mas nenhum teste força a passagem do tempo.",
+      "verified_by": []
+    },
+
+    {
+      "id": "e5.inicia-e-encerra-transmissao",
+      "etapa": 5,
+      "criterio": "O usuário inicia a transmissão, ela fica acessível na URL do canal, e encerra voltando a offline.",
+      "status": "verified",
+      "verified_by": [
+        "vitest::Etapa 5 — transmissão pessoal o canal fica offline até o dono iniciar, e volta a offline ao encerrar",
+        "vitest::Etapa 5 — transmissão pessoal só o dono transmite no próprio canal",
+        "vitest::Etapa 5 — transmissão pessoal canal inexistente devolve 404 sem revelar nada"
+      ]
+    },
+    {
+      "id": "e5.audiencia-so-recebe",
+      "etapa": 5,
+      "criterio": "Visitantes assistem sem publicar câmera ou microfone.",
+      "status": "verified",
+      "verified_by": ["vitest::Etapa 5 — transmissão pessoal visitante anônimo assiste sem receber permissão de publicar"]
+    },
+    {
+      "id": "e5.chat-publico",
+      "etapa": 5,
+      "criterio": "A transmissão tem chat público.",
+      "status": "pending",
+      "nota": "Mesma lacuna de e3.chat-da-festa: o Durable Object não é testado.",
+      "verified_by": []
+    },
+    {
+      "id": "e5.moderacao-da-transmissao",
+      "etapa": 5,
+      "criterio": "O criador modera o chat da própria transmissão.",
+      "status": "pending",
+      "nota": "Não implementado.",
+      "verified_by": []
+    },
+
+    {
+      "id": "e6.matchmaking",
+      "etapa": 6,
+      "criterio": "Fila e matchmaking associam usuários para chamadas aleatórias.",
+      "status": "pending",
+      "nota": "Etapa não iniciada.",
+      "verified_by": []
+    },
+    {
+      "id": "e6.um-par-por-vez",
+      "etapa": 6,
+      "criterio": "Cada usuário é associado a no máximo um par por vez.",
+      "status": "pending",
+      "nota": "Etapa não iniciada.",
+      "verified_by": []
+    },
+    {
+      "id": "e6.bloqueio-antes-do-par",
+      "etapa": 6,
+      "criterio": "Bloqueios são respeitados antes da criação da chamada aleatória.",
+      "status": "pending",
+      "nota": "Etapa não iniciada.",
+      "verified_by": []
+    },
+
+    {
+      "id": "mg.sem-credencial-bloqueia",
+      "etapa": "media",
+      "criterio": "Sem credenciais completas do provedor, a mídia fica bloqueada de forma explícita — nunca meio ligada.",
+      "status": "verified",
+      "verified_by": [
+        "vitest::gatewayFromEnv sem as três credenciais, o gateway fica desconfigurado",
+        "vitest::gatewayFromEnv com as três credenciais, sobe o gateway real"
+      ]
+    },
+    {
+      "id": "mg.preset-decidido-pelo-backend",
+      "etapa": "media",
+      "criterio": "O preset de mídia é escolhido pelas permissões vindas do backend, nunca por dado do cliente.",
+      "status": "verified",
+      "verified_by": [
+        "vitest::RealtimeKitGateway quem modera vira host",
+        "vitest::RealtimeKitGateway quem publica sem moderar vira participante",
+        "vitest::RealtimeKitGateway quem não publica áudio nem vídeo vira audiência",
+        "vitest::RealtimeKitGateway nomes de preset são configuráveis, para orgs que não usam os padrões"
+      ]
+    },
+    {
+      "id": "mg.provedor-aceita-o-contrato",
+      "etapa": "media",
+      "criterio": "O provedor real aceita as chamadas que emitimos: cria reunião, emite token e reconhece os três presets.",
+      "status": "pending",
+      "nota": "A lacuna mais perigosa do repositório. Os testes do gateway usam fetch mockado: eles afirmam o contrato que EMITIMOS e passariam verdes contra uma API desligada — foi exatamente o que aconteceu com a API legada do Dyte. Só .github/workflows/media-contract.yml, com credencial real, fecha isto.",
+      "verified_by": []
+    }
+  ],
+
+  "known_gaps": [
+    {
+      "id": "wrangler.database_id-placeholder",
+      "arquivo": "wrangler.jsonc",
+      "descricao": "database_id é um UUID de zeros. Funciona local, mas não é um banco real de produção.",
+      "detectar": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "id": "gateway-nao-verificado",
+      "arquivo": "src/worker/media-gateway.ts",
+      "descricao": "O gateway declara no próprio comentário que nunca rodou contra credenciais reais.",
+      "detectar": "NÃO VERIFICADO"
+    }
+  ]
+}

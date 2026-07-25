@@ -73,6 +73,41 @@ test/          Vitest (unidade + integração)
 e2e/           Playwright
 ```
 
+## CI: o que o código faz vs. o que prometemos
+
+`npm run verify` roda exatamente o que o CI roda. Além de tipos, lint e testes,
+duas verificações existem para o repositório não mentir sobre si mesmo:
+
+**`docs/acceptance.json`** é o inventário das promessas do plano (Etapas 0 a 6),
+legível por máquina. Cada critério de aceite está marcado `verified` — e então
+aponta para testes nomeados que precisam existir e passar — ou `pending`, e
+aparece no resumo de toda execução do CI.
+
+`scripts/check-promises.mjs` cruza o inventário com o resultado real dos testes
+e falha quando ele mente em qualquer direção: promessa `verified` sem teste,
+teste renomeado ou apagado, teste que existe mas falha, promessa `pending` que
+já tem verificação. Um teste **pulado** também não conta como prova.
+
+```bash
+npm run verify                       # tudo, como no CI
+node scripts/check-promises.mjs \
+  --vitest=reports/vitest.json \
+  --playwright=reports/playwright.json \
+  --strict-etapa=4                   # trava: exige a etapa 4 inteira verificada
+```
+
+`scripts/check-integrity.mjs` pega referência pendurada (todo `docs/*.md` citado
+em código precisa existir) e valor de fachada (UUID de zeros, `changeme`), que
+só pode existir se declarado em `known_gaps`. A checagem é bidirecional: lacuna
+já resolvida também falha, para o inventário não acumular dívida imaginária.
+
+O workflow `media-contract.yml` chama o provedor de mídia **de verdade**, em
+agenda diária. É o único mecanismo que detecta o provedor mudando sem ninguém
+tocar no nosso código — os testes unitários do gateway usam `fetch` mockado e
+passariam verdes contra uma API desligada, que foi como a API legada do Dyte
+morreu sem o CI perceber. Sem os secrets configurados ele não contata ninguém e
+diz isso em alto e bom som, em vez de passar por omissão.
+
 ## Limitações conhecidas desta etapa
 
 - Não há fonte real da TV do parceiro: a produção mostrará o estado

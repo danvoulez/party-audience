@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Piso de regressão: o que o código faz hoje não pode piorar.
+  verify:
+    name: Verificação
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+
+      - name: Tipos
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Testes unitários e de integração
+        run: |
+          npm run build:client
+          npx vitest run --reporter=json --outputFile=reports/vitest.json --reporter=default
+
+      - name: Navegador para e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Testes end-to-end
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: reports/playwright.json
+        run: npx playwright test --reporter=json,list
+
+      # As promessas do plano são conferidas contra o resultado real acima.
+      # Um teste renomeado, apagado ou falhando derruba este passo mesmo que
+      # os anteriores passem.
+      - name: Promessas do plano vs. código
+        if: always()
+        run: node scripts/check-promises.mjs --vitest=reports/vitest.json --playwright=reports/playwright.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reports
+          path: reports/
+          retention-days: 7
+
+  # Não depende de rodar testes: é sobre o repositório não mentir sobre si.
+  integridade:
+    name: Integridade
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Referências penduradas e valores de fachada
+        run: node scripts/check-integrity.mjs
+
+  # A migration precisa aplicar limpa num banco vazio, sempre. Se ela e as
+  # queries divergirem, os testes de sessão quebram aqui — não em produção.
+  migracao:
+    name: Migration em banco limpo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Aplicar migration e exercitar o schema
+        run: npx vitest run test/integration/sessions.test.ts

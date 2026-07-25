@@ -11,3 +11,4 @@ public/*.js.map
 # Saídas de teste
 test-results/
 playwright-report/
+reports/
