@@ -13,12 +13,22 @@ const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
 const appId = process.env.REALTIMEKIT_APP_ID;
 const apiToken = process.env.CLOUDFLARE_API_TOKEN;
 const temCredenciais = Boolean(accountId && appId && apiToken);
+const presetOrDefault = (value: string | undefined, fallback: string) => value?.trim() || fallback;
 
 const presets = {
-  groupCallHost: process.env.RTK_PRESET_HOST ?? DEFAULT_PRESETS.groupCallHost,
-  groupCallParticipant: process.env.RTK_PRESET_PARTICIPANT ?? DEFAULT_PRESETS.groupCallParticipant,
-  livestreamHost: process.env.RTK_PRESET_LIVESTREAM_HOST ?? DEFAULT_PRESETS.livestreamHost,
-  livestreamViewer: process.env.RTK_PRESET_VIEWER ?? DEFAULT_PRESETS.livestreamViewer,
+  groupCallHost: presetOrDefault(process.env.RTK_PRESET_HOST, DEFAULT_PRESETS.groupCallHost),
+  groupCallParticipant: presetOrDefault(
+    process.env.RTK_PRESET_PARTICIPANT,
+    DEFAULT_PRESETS.groupCallParticipant,
+  ),
+  livestreamHost: presetOrDefault(
+    process.env.RTK_PRESET_LIVESTREAM_HOST,
+    DEFAULT_PRESETS.livestreamHost,
+  ),
+  livestreamViewer: presetOrDefault(
+    process.env.RTK_PRESET_VIEWER,
+    DEFAULT_PRESETS.livestreamViewer,
+  ),
 };
 
 describe("contrato com o provedor de mídia", () => {

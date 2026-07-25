@@ -39,6 +39,8 @@ export const DEFAULT_PRESETS: PresetNames = {
 
 export type MediaPreset = keyof PresetNames;
 
+const presetOrDefault = (value: string | undefined, fallback: string) => value?.trim() || fallback;
+
 export class UnconfiguredGateway implements MediaGateway {
   readonly configured = false;
   createRoom(): Promise<string> {
@@ -140,10 +142,16 @@ export function gatewayFromEnv(env: MediaEnv): MediaGateway {
     env.REALTIMEKIT_APP_ID,
     env.CLOUDFLARE_API_TOKEN,
     {
-      groupCallHost: env.RTK_PRESET_HOST ?? DEFAULT_PRESETS.groupCallHost,
-      groupCallParticipant: env.RTK_PRESET_PARTICIPANT ?? DEFAULT_PRESETS.groupCallParticipant,
-      livestreamHost: env.RTK_PRESET_LIVESTREAM_HOST ?? DEFAULT_PRESETS.livestreamHost,
-      livestreamViewer: env.RTK_PRESET_VIEWER ?? DEFAULT_PRESETS.livestreamViewer,
+      groupCallHost: presetOrDefault(env.RTK_PRESET_HOST, DEFAULT_PRESETS.groupCallHost),
+      groupCallParticipant: presetOrDefault(
+        env.RTK_PRESET_PARTICIPANT,
+        DEFAULT_PRESETS.groupCallParticipant,
+      ),
+      livestreamHost: presetOrDefault(
+        env.RTK_PRESET_LIVESTREAM_HOST,
+        DEFAULT_PRESETS.livestreamHost,
+      ),
+      livestreamViewer: presetOrDefault(env.RTK_PRESET_VIEWER, DEFAULT_PRESETS.livestreamViewer),
     },
     env.CLOUDFLARE_API_BASE,
   );

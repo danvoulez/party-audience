@@ -31,6 +31,20 @@ describe("gatewayFromEnv", () => {
   it("com as três credenciais, sobe o gateway real", () => {
     expect(gatewayFromEnv(CREDS).configured).toBe(true);
   });
+
+  it("variável de preset vazia não apaga o padrão", async () => {
+    const fetchSpy = mockFetch({ success: true, data: { token: "t" } });
+    const gateway = gatewayFromEnv({ ...CREDS, RTK_PRESET_VIEWER: "   " });
+
+    await gateway.createParticipantToken("m1", {
+      participantId: "u",
+      username: "u",
+      preset: "livestreamViewer",
+    });
+
+    const [, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string).preset_name).toBe(DEFAULT_PRESETS.livestreamViewer);
+  });
 });
 
 describe("RealtimeKitGateway", () => {
