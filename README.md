@@ -2,10 +2,12 @@
 
 Plataforma de vídeo social — MVP em construção por fatias verticais.
 
-**Etapa atual: 0 + 1 — homepage pública com TV 24h externa.**
-Festa em grupo, chamadas privadas, transmissão pessoal e matchmaking ainda
-**não** foram iniciados. As telas `/login` e `/signup` são placeholders que
-declaram isso explicitamente.
+**Etapa atual: 0 a 5 parcialmente implementadas.** A homepage, identidade,
+sessões, controles de festa, chamadas privadas e transmissão pessoal já têm
+fluxos de backend. Os critérios concluídos e as lacunas restantes ficam no
+inventário executável [`docs/acceptance.json`](docs/acceptance.json). Mídia em
+tempo real depende de credenciais do RealtimeKit; matchmaking (etapa 6) ainda
+não foi iniciado.
 
 ## Stack
 
@@ -55,11 +57,26 @@ câmera/microfone.
 
 ```bash
 npx wrangler login
-npm run deploy
 npx wrangler secret put TV_SOURCE   # fonte real do parceiro
+npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
+npx wrangler secret put REALTIMEKIT_APP_ID
+npx wrangler secret put CLOUDFLARE_API_TOKEN
+npm run deploy
 ```
 
-Não verificado neste ambiente (sem credenciais Cloudflare).
+`npm run deploy` reúne o processo inteiro: verifica o projeto, cria ou vincula
+o D1, aplica migrations, inspeciona os secrets, publica e confirma `/healthz`.
+Para validar apenas o bundle e obter uma lista única do que ainda depende de
+acesso externo, sem autenticar nem alterar a conta, use:
+
+```bash
+npm run deploy:check
+```
+
+O deploy pode subir de forma degradada sem TV ou mídia; o script deixa isso
+explícito e reúne ao final os comandos das pendências externas. Para considerar
+a experiência completa pronta, também execute manualmente o workflow
+`media-contract.yml` com os secrets configurados, validando o provedor real.
 
 ## Estrutura
 
