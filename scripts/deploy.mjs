@@ -30,6 +30,20 @@ let passo = 0;
 const titulo = (t) => console.log(`\n\x1b[1m${++passo}. ${t}\x1b[0m`);
 const ok = (m) => console.log(`   \x1b[32m✓\x1b[0m ${m}`);
 const aviso = (m) => console.log(`   \x1b[33m!\x1b[0m ${m}`);
+const pendencias = [];
+
+function pendente(titulo, comando) {
+  pendencias.push({ titulo, comando });
+}
+
+function mostrarPendencias() {
+  if (!pendencias.length) return;
+  console.log("\n\x1b[1mPendências externas reunidas:\x1b[0m");
+  for (const [indice, item] of pendencias.entries()) {
+    console.log(`   ${indice + 1}. ${item.titulo}`);
+    if (item.comando) console.log(`      ${item.comando}`);
+  }
+}
 
 function morrer(mensagem, detalhe) {
   console.error(`\n\x1b[31m✖ ${mensagem}\x1b[0m`);
@@ -54,26 +68,37 @@ const wrangler = (args, opts) => run("npx", ["wrangler", ...args], opts);
 // ------------------------------------------------------------- 1. credencial
 
 titulo("Credencial");
-const quem = wrangler(["whoami"], { silencioso: true, tolerante: true });
-if (!quem || /not authenticated/i.test(quem)) {
-  morrer(
-    "wrangler não está autenticado.",
-    [
-      "Duas formas, qualquer uma serve:",
-      "",
-      "  a) Máquina com navegador:",
-      "       npx wrangler login",
-      "",
-      "  b) Sem navegador (container, CI):",
-      "       export CLOUDFLARE_API_TOKEN=...   # precisa de Workers Scripts:Edit e D1:Edit",
-      "       export CLOUDFLARE_ACCOUNT_ID=...",
-      "",
-      "Token se cria em: My Profile > API Tokens no dashboard da Cloudflare.",
-    ].join("\n"),
+let quem = null;
+if (dryRun) {
+  aviso("não consultada (--dry-run); o deploy real exige autenticação");
+  pendente(
+    "Autenticar o Wrangler (ou exportar CLOUDFLARE_API_TOKEN e CLOUDFLARE_ACCOUNT_ID).",
+    "npx wrangler login",
   );
+} else {
+  quem = wrangler(["whoami"], { silencioso: true, tolerante: true });
+  if (!quem || /not authenticated/i.test(quem)) {
+    morrer(
+      "wrangler não está autenticado.",
+      [
+        "Duas formas, qualquer uma serve:",
+        "",
+        "  a) Máquina com navegador:",
+        "       npx wrangler login",
+        "",
+        "  b) Sem navegador (container, CI):",
+        "       export CLOUDFLARE_API_TOKEN=...   # precisa de Workers Scripts:Edit e D1:Edit",
+        "       export CLOUDFLARE_ACCOUNT_ID=...",
+        "",
+        "Token se cria em: My Profile > API Tokens no dashboard da Cloudflare.",
+      ].join("\n"),
+    );
+  }
 }
-const conta = quem.match(/associated with the email ([^\s.]+)/i)?.[1];
-ok(conta ? `autenticado como ${conta}` : "autenticado");
+if (quem) {
+  const conta = quem.match(/associated with the email ([^\s.]+)/i)?.[1];
+  ok(conta ? `autenticado como ${conta}` : "autenticado");
+}
 
 // ------------------------------------------------------------ 2. verificação
 
@@ -95,6 +120,7 @@ if (databaseId && databaseId !== PLACEHOLDER_DB_ID) {
   ok(`já configurado (${databaseId})`);
 } else if (dryRun) {
   aviso(`database_id ainda é placeholder; o deploy real criaria/vincularia "${DB_NAME}"`);
+  pendente("Criar/vincular o D1 e aplicar a migration (feito automaticamente pelo deploy real).", "npm run deploy");
 } else {
   // Reaproveita o banco se ele já existir na conta; só cria quando falta.
   const lista = wrangler(["d1", "list", "--json"], { silencioso: true, tolerante: true });
@@ -141,25 +167,41 @@ if (dryRun) {
 // ---------------------------------------------------- 5. o que sobe degradado
 
 titulo("O que sobe funcionando");
-const segredos = wrangler(["secret", "list"], { silencioso: true, tolerante: true }) ?? "";
+const segredos = dryRun
+  ? ""
+  : (wrangler(["secret", "list"], { silencioso: true, tolerante: true }) ?? "");
 const tem = (nome) => segredos.includes(nome);
 
 const midiaPronta = tem("CLOUDFLARE_ACCOUNT_ID") && tem("REALTIMEKIT_APP_ID") && tem("CLOUDFLARE_API_TOKEN");
 
 // A TV é um encaixe: quando houver fonte, é uma variável e pronto, sem deploy
 // de código. Até lá a homepage mostra o estado "não configurada".
-if (tem("TV_SOURCE")) {
+if (dryRun) {
+  aviso("segredos não consultados (--dry-run); confirme TV_SOURCE antes do deploy");
+  pendente("Configurar a fonte real da TV, quando o parceiro fornecer o sinal.", "npx wrangler secret put TV_SOURCE");
+} else if (tem("TV_SOURCE")) {
   ok("TV 24h: fonte configurada");
 } else {
-  ok("TV 24h: encaixe pronto e vazio — quando houver sinal, wrangler secret put TV_SOURCE");
+  aviso("TV 24h: encaixe pronto, mas sem sinal configurado");
+  pendente("Configurar a fonte real da TV, quando o parceiro fornecer o sinal.", "npx wrangler secret put TV_SOURCE");
 }
 
-if (midiaPronta) {
+if (dryRun) {
+  aviso("segredos não consultados (--dry-run); confirme as credenciais de mídia antes do deploy");
+  pendente(
+    "Configurar CLOUDFLARE_ACCOUNT_ID, REALTIMEKIT_APP_ID e CLOUDFLARE_API_TOKEN como secrets.",
+    "npx wrangler secret put <NOME>",
+  );
+} else if (midiaPronta) {
   ok("mídia interativa: credenciais presentes");
 } else {
   aviso("mídia interativa: sem credenciais, áudio e vídeo sobem bloqueados (docs/media-gateway.md)");
+  pendente(
+    "Configurar CLOUDFLARE_ACCOUNT_ID, REALTIMEKIT_APP_ID e CLOUDFLARE_API_TOKEN como secrets.",
+    "npx wrangler secret put <NOME>",
+  );
 }
-ok("identidade, sessões, festa, chamadas, transmissão e chat: funcionam sem depender do acima");
+ok("identidade, sessões e controles sociais não dependem dos secrets de mídia");
 
 // ------------------------------------------------------------------ 6. deploy
 
@@ -168,6 +210,7 @@ if (dryRun) {
   const saida = wrangler(["deploy", "--dry-run"], { silencioso: true });
   ok("build de deploy válido");
   console.log(saida.split("\n").filter((l) => l.includes("env.") || l.includes("Total Upload")).join("\n"));
+  mostrarPendencias();
   console.log("\n\x1b[1m--dry-run: nada foi criado nem publicado.\x1b[0m");
   process.exit(0);
 }
@@ -182,6 +225,7 @@ ok(url ? `publicado em ${url}` : "publicado");
 titulo("Confirmação no ar");
 if (!url) {
   aviso("não achei a URL na saída do wrangler; confirme /healthz manualmente");
+  mostrarPendencias();
   process.exit(0);
 }
 
@@ -210,4 +254,5 @@ if (saude.db !== true) {
 
 ok(`/healthz responde: ${JSON.stringify(saude)}`);
 console.log(`\n\x1b[1m\x1b[32mNo ar:\x1b[0m ${url}`);
-console.log(`   TV em "não configurada" (não temos fonte ainda) e mídia ${midiaPronta ? "ativa" : "bloqueada"}.`);
+console.log(`   TV ${tem("TV_SOURCE") ? "configurada" : "não configurada"} e mídia ${midiaPronta ? "ativa" : "bloqueada"}.`);
+mostrarPendencias();
