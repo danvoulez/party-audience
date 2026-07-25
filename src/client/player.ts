@@ -1,6 +1,9 @@
 import type { TvPlayback } from "../shared/tv-source";
 import type { PlaybackEvent } from "../shared/events";
 import { reduce, type PlayerState } from "./state";
+import { wireLogout } from "./chrome";
+
+wireLogout();
 
 /**
  * Player da homepage pública. Regras desta etapa:

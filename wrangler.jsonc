@@ -5,9 +5,27 @@
   "compatibility_date": "2026-07-01",
   "assets": {
     "directory": "./public"
-  }
-  // TV_SOURCE é definida por ambiente:
-  //  - dev local: arquivo .dev.vars (ver .dev.vars.example) ou --var na CLI;
-  //  - produção: `wrangler secret put TV_SOURCE` ou vars no dashboard.
-  // O formato do JSON está documentado em docs/tv-partner-contract.md.
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "party-audience",
+      // Placeholder: em produção, crie com `wrangler d1 create party-audience`
+      // e substitua pelo database_id real. Localmente qualquer id funciona.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "SESSION_ROOMS", "class_name": "SessionRoom" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["SessionRoom"] }
+  ]
+  // Vars/segredos por ambiente (dev: .dev.vars; produção: wrangler secret put):
+  //   TV_SOURCE            — fonte da TV 24h (docs/tv-partner-contract.md)
+  //   REALTIMEKIT_ORG_ID   — org do Cloudflare RealtimeKit (docs/media-gateway.md)
+  //   REALTIMEKIT_API_KEY  — chave da API do RealtimeKit
 }
