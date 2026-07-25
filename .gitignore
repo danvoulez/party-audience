@@ -2,11 +2,11 @@ node_modules/
 .wrangler/
 .dev.vars
 
-# Artefatos de build do cliente (gerados por npm run build:client)
-public/player.js
-public/player.js.map
-public/hls-*.js
-public/hls-*.js.map
+# Artefatos de build do cliente (gerados por npm run build:client).
+# Só public/styles.css é versionado; todo .js em public/ é saída do esbuild,
+# incluindo chunks com hash de conteúdo (chunk-*.js, hls-*.js).
+public/*.js
+public/*.js.map
 
 # Saídas de teste
 test-results/
