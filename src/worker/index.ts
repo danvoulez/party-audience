@@ -5,7 +5,6 @@ import {
   renderAuthPage,
   renderCallPage,
   renderChannelPage,
-  renderForbidden,
   renderHomePage,
   renderLobbyPage,
   renderNotFound,
@@ -139,14 +138,16 @@ const worker = {
       return handleEvents(request);
     }
 
-    if (pathname.startsWith("/api/") || pathname === "/lobby" || pathname === "/festa" || isChannelPath(pathname) || pathname.startsWith("/chamada/")) {
+    // Só a API responde 503 quando o backend não está vinculado: o cliente
+    // precisa do diagnóstico. As páginas HTML degradam pelos caminhos normais
+    // (sem DB não há sessão → /lobby e /festa mandam para /login, e qualquer
+    // slug vira 404), preservando a promessa da Etapa 1 de que uma falha gera
+    // estado controlado em vez de página quebrada.
+    if (pathname.startsWith("/api/")) {
       if (!env.DB || !env.SESSION_ROOMS) {
         return Response.json({ error: "backend_unconfigured", detail: "D1/Durable Objects não vinculados" }, { status: 503 });
       }
-    }
-
-    if (pathname.startsWith("/api/")) {
-      const ctx: Ctx = { db: new Db(env.DB!), gateway: gatewayFromEnv(env), rooms: env.SESSION_ROOMS! };
+      const ctx: Ctx = { db: new Db(env.DB), gateway: gatewayFromEnv(env), rooms: env.SESSION_ROOMS };
       return handleApi(request, ctx, pathname);
     }
 

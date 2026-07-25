@@ -23,8 +23,6 @@ const statusEl = document.getElementById("call-status");
 const endButton = document.getElementById("end-call") as HTMLButtonElement | null;
 const backLink = document.getElementById("back-to-party");
 
-let pollTimer: number | undefined;
-
 function describe(info: CallInfo): string {
   switch (info.state) {
     case "ringing":
@@ -74,5 +72,7 @@ endButton?.addEventListener("click", async () => {
   await refresh();
 });
 
+// O timer é criado antes do primeiro refresh para que refresh() nunca leia
+// pollTimer antes da inicialização ao encerrar a chamada no primeiro ciclo.
+const pollTimer = window.setInterval(() => void refresh(), 2000);
 void refresh();
-pollTimer = window.setInterval(() => void refresh(), 2000);

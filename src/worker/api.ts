@@ -12,8 +12,8 @@ import {
   sha256Hex,
   verifyPassword,
 } from "./auth";
-import { Db, membershipPerms } from "./db";
-import type { UserRow } from "./db";
+import { membershipPerms } from "./db";
+import type { Db, UserRow } from "./db";
 import { mediaAccessFor } from "./media-gateway";
 import type { MediaGateway } from "./media-gateway";
 

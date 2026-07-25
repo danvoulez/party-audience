@@ -35,7 +35,7 @@ test("TV não configurada: página funciona e mostra indisponibilidade honesta",
   await expect(overlay).toContainText("TV indisponível");
   await expect(overlay).toContainText("ainda não foi configurada");
 
-  await expect(page.getByRole("link", { name: "Entrar" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Entrar", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Criar conta" })).toBeVisible();
   expect(await page.evaluate(() => window.__gumCalled)).toBeUndefined();
 });
@@ -83,9 +83,18 @@ test("layout responde a viewports mobile e desktop", async ({ page }) => {
   expect(desktopBox && desktopBox.width).toBeGreaterThan(600);
 });
 
-test("links de login e cadastro levam a telas que declaram a próxima etapa", async ({ page }) => {
+test("links do cabeçalho levam aos formulários reais de login e cadastro", async ({ page }) => {
+  await armGetUserMediaProbe(page);
   await page.goto(urls.unconfigured);
-  await page.getByRole("link", { name: "Entrar" }).click();
+  await page.getByRole("link", { name: "Entrar", exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.locator("main")).toContainText("próxima etapa");
+  await expect(page.locator("#auth-form")).toHaveAttribute("data-kind", "login");
+
+  // Escopo no cabeçalho: a página de login também traz "Criar conta" abaixo do formulário.
+  await page.getByRole("navigation").getByRole("link", { name: "Criar conta" }).click();
+  await expect(page).toHaveURL(/\/signup$/);
+  await expect(page.locator("#auth-form")).toHaveAttribute("data-kind", "signup");
+
+  // A tela de autenticação não pode pedir câmera nem microfone.
+  expect(await page.evaluate(() => window.__gumCalled)).toBeUndefined();
 });

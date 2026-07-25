@@ -9,6 +9,9 @@ export default tseslint.config(
     rules: {
       "@typescript-eslint/no-floating-promises": "off",
       "@typescript-eslint/consistent-type-imports": "error",
+      // Prefixo _ marca parâmetro exigido por um contrato externo (ex.: o
+      // construtor do Durable Object recebe state) mas não usado aqui.
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
     },
   },
   { ignores: ["node_modules", "public", ".wrangler", "test-results", "playwright-report"] },

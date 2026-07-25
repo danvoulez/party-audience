@@ -225,13 +225,3 @@ export function renderNotFound(): string {
 </main>`;
   return layout("Party Audience — 404", body);
 }
-
-export function renderForbidden(message: string): string {
-  const body = `
-<main class="placeholder">
-  <h1>Acesso negado</h1>
-  <p>${escapeHtml(message)}</p>
-  <a class="button button-primary" href="/">Voltar para a TV</a>
-</main>`;
-  return layout("Party Audience — acesso negado", body);
-}

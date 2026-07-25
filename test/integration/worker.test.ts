@@ -59,21 +59,43 @@ describe("bundle do player", () => {
 });
 
 describe("páginas auxiliares", () => {
-  it("/login e /signup declaram explicitamente que ainda não são funcionais", async () => {
+  it("/login e /signup servem formulários reais de autenticação", async () => {
     for (const path of ["/login", "/signup"]) {
-      const body = await (await get(path)).text();
-      expect(body).toContain("próxima etapa");
+      const res = await get(path);
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).toContain('id="auth-form"');
+      expect(body).toContain(`data-kind="${path.slice(1) === "login" ? "login" : "signup"}"`);
+      expect(body).toContain('name="username"');
+      expect(body).toContain('name="password"');
+      expect(body).toContain('src="/auth.js"');
     }
   });
 
   it("rota desconhecida devolve 404 com página própria", async () => {
     const res = await get("/nao-existe");
     expect(res.status).toBe(404);
+    expect(await res.text()).toContain("Página não encontrada");
   });
 
-  it("/healthz informa o modo de TV ativo", async () => {
+  // Regressão: um slug válido sem D1 vinculado chegava a responder 503 JSON,
+  // quebrando a página 404 para praticamente qualquer URL do site.
+  it("slug com formato de canal, sem backend vinculado, ainda devolve 404 HTML", async () => {
+    const res = await get("/algum-canal");
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(await res.text()).toContain("Página não encontrada");
+  });
+
+  it("a API responde 503 quando o backend não está vinculado", async () => {
+    const res = await get("/api/me");
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: "backend_unconfigured" });
+  });
+
+  it("/healthz informa o modo de TV ativo e se o banco está vinculado", async () => {
     const res = await get("/healthz", HLS_ENV);
-    expect(await res.json()).toEqual({ ok: true, tv: "hls" });
+    expect(await res.json()).toEqual({ ok: true, tv: "hls", db: false });
   });
 });
 
