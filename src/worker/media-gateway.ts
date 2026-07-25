@@ -22,9 +22,27 @@ export interface MediaGateway {
 }
 
 export const REALTIMEKIT_SETUP_INSTRUCTIONS =
-  "Defina REALTIMEKIT_ORG_ID e REALTIMEKIT_API_KEY (dev: .dev.vars; produção: wrangler secret put). " +
-  "Os presets 'group_call_host', 'group_call_participant' e 'livestream_viewer' devem existir na organização RealtimeKit. " +
-  "Ver docs/media-gateway.md.";
+  "Defina CLOUDFLARE_ACCOUNT_ID, REALTIMEKIT_APP_ID e CLOUDFLARE_API_TOKEN " +
+  "(dev: .dev.vars; produção: wrangler secret put). O token precisa da permissão Realtime. " +
+  "Os presets configurados em RTK_PRESET_* devem existir no app. Ver docs/media-gateway.md.";
+
+/**
+ * Presets do RealtimeKit: é o preset, definido no app, que efetivamente aplica
+ * as permissões no plano de mídia. Os nomes são configuráveis porque só
+ * group_call_host e group_call_participant vêm prontos em apps criados pelo
+ * dashboard — o preset de audiência normalmente precisa ser criado.
+ */
+export interface PresetNames {
+  host: string;
+  participant: string;
+  viewer: string;
+}
+
+export const DEFAULT_PRESETS: PresetNames = {
+  host: "group_call_host",
+  participant: "group_call_participant",
+  viewer: "livestream_viewer",
+};
 
 export class UnconfiguredGateway implements MediaGateway {
   readonly configured = false;
@@ -40,23 +58,34 @@ export class UnconfiguredGateway implements MediaGateway {
 }
 
 /**
- * Cloudflare RealtimeKit (API compatível com Dyte v2).
- * NÃO VERIFICADO com credenciais reais neste ambiente — ver README.
+ * Cloudflare RealtimeKit, API atual sob a REST API da Cloudflare.
+ *
+ * A API legada do Dyte (api.dyte.io/v2, Basic auth com orgId:apiKey) foi
+ * descontinuada na migração para a Cloudflare: agora as rotas ficam sob
+ * /accounts/{accountId}/realtime/kit/{appId} e a autenticação é por token
+ * Cloudflare com permissão Realtime.
+ *
+ * NÃO VERIFICADO com credenciais reais neste ambiente — ver docs/media-gateway.md.
  */
 export class RealtimeKitGateway implements MediaGateway {
   readonly configured = true;
+  private readonly base: string;
 
   constructor(
-    private readonly orgId: string,
-    private readonly apiKey: string,
-    private readonly baseUrl = "https://api.realtime.cloudflare.com/v2",
-  ) {}
+    accountId: string,
+    appId: string,
+    private readonly apiToken: string,
+    private readonly presets: PresetNames = DEFAULT_PRESETS,
+    apiBase = "https://api.cloudflare.com/client/v4",
+  ) {
+    this.base = `${apiBase}/accounts/${accountId}/realtime/kit/${appId}`;
+  }
 
   private async call<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
+    const res = await fetch(`${this.base}${path}`, {
       ...init,
       headers: {
-        authorization: `Basic ${btoa(`${this.orgId}:${this.apiKey}`)}`,
+        authorization: `Bearer ${this.apiToken}`,
         "content-type": "application/json",
         ...init?.headers,
       },
@@ -68,26 +97,31 @@ export class RealtimeKitGateway implements MediaGateway {
   }
 
   async createRoom(title: string): Promise<string> {
-    const body = await this.call<{ data: { id: string } }>("/meetings", {
+    const body = await this.call<{ result?: { id: string }; data?: { id: string } }>("/meetings", {
       method: "POST",
       body: JSON.stringify({ title }),
     });
-    return body.data.id;
+    // A REST API da Cloudflare embrulha em `result`; a herança Dyte usa `data`.
+    const id = body.result?.id ?? body.data?.id;
+    if (!id) throw new Error("realtimekit_error: resposta sem id da reunião");
+    return id;
   }
 
   async createParticipantToken(
     roomId: string,
     participant: { userId: string; username: string; perms: Permissions },
   ): Promise<string> {
-    // O preset (definido na organização RealtimeKit) é quem efetivamente
-    // aplica as permissões no plano de mídia; escolhemos pelo shape das
-    // permissões vindas do backend — nunca do cliente.
+    // O preset é quem aplica as permissões no plano de mídia; escolhemos pelo
+    // shape das permissões vindas do backend — nunca do cliente.
     const preset = !participant.perms.canPublishAudio && !participant.perms.canPublishVideo
-      ? "livestream_viewer"
+      ? this.presets.viewer
       : participant.perms.canModerate
-        ? "group_call_host"
-        : "group_call_participant";
-    const body = await this.call<{ data: { token: string } }>(`/meetings/${roomId}/participants`, {
+        ? this.presets.host
+        : this.presets.participant;
+    const body = await this.call<{
+      result?: { authToken?: string; token?: string };
+      data?: { authToken?: string; token?: string };
+    }>(`/meetings/${roomId}/participants`, {
       method: "POST",
       body: JSON.stringify({
         name: participant.username,
@@ -95,20 +129,43 @@ export class RealtimeKitGateway implements MediaGateway {
         preset_name: preset,
       }),
     });
-    return body.data.token;
+    const payload = body.result ?? body.data;
+    const token = payload?.authToken ?? payload?.token;
+    if (!token) throw new Error("realtimekit_error: resposta sem authToken do participante");
+    return token;
   }
 
   async endRoom(): Promise<void> {
-    // A API do RealtimeKit encerra reuniões por inatividade; kick explícito de
-    // todos os participantes fica para quando houver credenciais para validar.
+    // O RealtimeKit encerra reuniões por inatividade; kick explícito de todos
+    // os participantes fica para quando houver credenciais para validar.
   }
 }
 
-export function gatewayFromEnv(env: { REALTIMEKIT_ORG_ID?: string; REALTIMEKIT_API_KEY?: string; REALTIMEKIT_BASE_URL?: string }): MediaGateway {
-  if (env.REALTIMEKIT_ORG_ID && env.REALTIMEKIT_API_KEY) {
-    return new RealtimeKitGateway(env.REALTIMEKIT_ORG_ID, env.REALTIMEKIT_API_KEY, env.REALTIMEKIT_BASE_URL);
+export interface MediaEnv {
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  REALTIMEKIT_APP_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  CLOUDFLARE_API_BASE?: string;
+  RTK_PRESET_HOST?: string;
+  RTK_PRESET_PARTICIPANT?: string;
+  RTK_PRESET_VIEWER?: string;
+}
+
+export function gatewayFromEnv(env: MediaEnv): MediaGateway {
+  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.REALTIMEKIT_APP_ID || !env.CLOUDFLARE_API_TOKEN) {
+    return new UnconfiguredGateway();
   }
-  return new UnconfiguredGateway();
+  return new RealtimeKitGateway(
+    env.CLOUDFLARE_ACCOUNT_ID,
+    env.REALTIMEKIT_APP_ID,
+    env.CLOUDFLARE_API_TOKEN,
+    {
+      host: env.RTK_PRESET_HOST ?? DEFAULT_PRESETS.host,
+      participant: env.RTK_PRESET_PARTICIPANT ?? DEFAULT_PRESETS.participant,
+      viewer: env.RTK_PRESET_VIEWER ?? DEFAULT_PRESETS.viewer,
+    },
+    env.CLOUDFLARE_API_BASE,
+  );
 }
 
 /** Resolve o acesso à mídia para um participante, sem nunca lançar para a rota. */

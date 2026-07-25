@@ -25,7 +25,8 @@
     { "tag": "v1", "new_sqlite_classes": ["SessionRoom"] }
   ]
   // Vars/segredos por ambiente (dev: .dev.vars; produção: wrangler secret put):
-  //   TV_SOURCE            — fonte da TV 24h (docs/tv-partner-contract.md)
-  //   REALTIMEKIT_ORG_ID   — org do Cloudflare RealtimeKit (docs/media-gateway.md)
-  //   REALTIMEKIT_API_KEY  — chave da API do RealtimeKit
+  //   TV_SOURCE              — fonte da TV 24h (docs/tv-partner-contract.md)
+  //   CLOUDFLARE_ACCOUNT_ID  — conta Cloudflare (docs/media-gateway.md)
+  //   REALTIMEKIT_APP_ID     — app RealtimeKit dentro da conta
+  //   CLOUDFLARE_API_TOKEN   — token com permissão Realtime
 }

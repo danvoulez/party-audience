@@ -10,3 +10,18 @@
 # Cloudflare Stream:
 # TV_SOURCE={"kind":"cloudflare_stream","customerSubdomain":"customer-abc123","videoId":"31c9291ab41fac05471db4e73aa11717"}
 TV_SOURCE=
+
+# Mídia interativa (festa, chamada, transmissão) — Cloudflare RealtimeKit.
+# Sem as três, o app roda com media "blocked": presença, chat e permissões
+# funcionam, áudio e vídeo não. Passo a passo em docs/media-gateway.md.
+#
+# O token se cria em My Profile > API Tokens, com permissão Realtime.
+CLOUDFLARE_ACCOUNT_ID=
+REALTIMEKIT_APP_ID=
+CLOUDFLARE_API_TOKEN=
+
+# Opcionais: só se o app usa nomes de preset diferentes dos padrões
+# (group_call_host, group_call_participant, livestream_viewer).
+# RTK_PRESET_HOST=
+# RTK_PRESET_PARTICIPANT=
+# RTK_PRESET_VIEWER=

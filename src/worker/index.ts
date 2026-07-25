@@ -12,6 +12,7 @@ import {
 } from "./html";
 import { Db } from "./db";
 import { gatewayFromEnv } from "./media-gateway";
+import type { MediaEnv } from "./media-gateway";
 import type { UserRow } from "./db";
 import {
   currentUser,
@@ -41,14 +42,11 @@ import type { Ctx } from "./api";
 
 export { SessionRoom } from "./session-room";
 
-export interface Env {
+export interface Env extends MediaEnv {
   /** JSON validado por tvSourceSchema; ver docs/tv-partner-contract.md. */
   TV_SOURCE?: string;
   DB?: D1Database;
   SESSION_ROOMS?: DurableObjectNamespace;
-  REALTIMEKIT_ORG_ID?: string;
-  REALTIMEKIT_API_KEY?: string;
-  REALTIMEKIT_BASE_URL?: string;
 }
 
 const HTML_HEADERS = { "content-type": "text/html; charset=utf-8" } as const;
