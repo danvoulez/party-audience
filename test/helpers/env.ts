@@ -109,5 +109,12 @@ export function makeRooms(): { ns: DurableObjectNamespace; calls: RoomCall[] } {
 export function makeEnv(): Env & { DB: TestD1; roomCalls: RoomCall[] } {
   const DB = new TestD1();
   const { ns, calls } = makeRooms();
-  return { DB, SESSION_ROOMS: ns, roomCalls: calls };
+  return {
+    DB,
+    SESSION_ROOMS: ns,
+    roomCalls: calls,
+    CLOUDFLARE_ACCOUNT_ID: "test-account",
+    REALTIMEKIT_APP_ID: "test-app",
+    CLOUDFLARE_API_TOKEN: "test-token",
+  };
 }

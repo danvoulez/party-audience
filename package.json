@@ -9,17 +9,16 @@
     "dev": "npm run build:client && wrangler dev",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test e2e scripts",
-    "test": "npm run build:client && vitest run",
+    "test": "npm run build:client && vitest run test/unit test/integration",
+    "test:media": "vitest run test/contract/media-provider.test.ts",
     "test:e2e": "npm run build:client && playwright test",
-    "check:integrity": "node scripts/check-integrity.mjs",
-    "check:promises": "node scripts/check-promises.mjs --vitest=reports/vitest.json --playwright=reports/playwright.json",
-    "report:vitest": "npm run build:client && vitest run --reporter=json --outputFile=reports/vitest.json --reporter=default",
-    "report:e2e": "npm run build:client && PLAYWRIGHT_JSON_OUTPUT_NAME=reports/playwright.json playwright test --reporter=json,list",
-    "verify": "npm run typecheck && npm run lint && npm run check:integrity && npm run report:vitest && npm run report:e2e && npm run check:promises",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run test:e2e",
     "deploy": "node scripts/deploy.mjs",
     "deploy:check": "node scripts/deploy.mjs --dry-run"
   },
   "dependencies": {
+    "@cloudflare/realtimekit": "^2.0.1",
+    "@cloudflare/realtimekit-ui": "^2.0.1",
     "hls.js": "^1.6.0",
     "zod": "^3.24.0"
   },

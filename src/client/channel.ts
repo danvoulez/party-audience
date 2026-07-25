@@ -1,6 +1,7 @@
 import { postJson, wireLogout } from "./chrome";
 import { appendChat, connectRoom, showChatNotice, showMediaAccess, wireChat } from "./room-chat";
 import type { RoomServerEvent } from "../shared/api";
+import type { MediaAccess } from "../shared/api";
 
 wireLogout();
 
@@ -36,10 +37,13 @@ async function connectIfLive(): Promise<void> {
   const info = (await res.json()) as {
     status: string;
     sessionId: string | null;
-    media?: { status: string; reason?: string; message?: string };
+    media?: MediaAccess;
   };
   if (info.status === "live" && info.sessionId) {
-    showMediaAccess(info.media);
+    showMediaAccess(info.media, {
+      audio: config.isOwner === true,
+      video: config.isOwner === true,
+    });
     ws = connectRoom(`/api/sessions/${info.sessionId}/ws`, onEvent);
     wireChat(() => ws);
   }

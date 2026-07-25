@@ -1,5 +1,6 @@
 import { postJson, wireLogout } from "./chrome";
 import { showMediaAccess } from "./room-chat";
+import type { MediaAccess } from "../shared/api";
 
 wireLogout();
 
@@ -14,7 +15,7 @@ interface CallInfo {
   sessionId?: string;
   caller?: string;
   callee?: string;
-  media?: { status: string; reason?: string; message?: string };
+  media?: MediaAccess;
   error?: string;
 }
 
@@ -22,6 +23,7 @@ const config = JSON.parse(document.getElementById("call-config")?.textContent ??
 const statusEl = document.getElementById("call-status");
 const endButton = document.getElementById("end-call") as HTMLButtonElement | null;
 const backLink = document.getElementById("back-to-party");
+let mediaRequested = false;
 
 function describe(info: CallInfo): string {
   switch (info.state) {
@@ -56,7 +58,20 @@ async function refresh(): Promise<void> {
   if (endButton) endButton.hidden = !active && info.state !== "ringing";
   if (endButton) endButton.textContent = info.state === "ringing" ? "Cancelar chamada" : "Encerrar chamada";
   if (backLink) backLink.hidden = active || info.state === "ringing";
-  if (active) showMediaAccess(info.media);
+  if (active && !mediaRequested) {
+    mediaRequested = true;
+    const mediaResponse = await fetch(`/api/calls/${config.inviteId}?media=1`);
+    if (mediaResponse.status === 200) {
+      const withMedia = (await mediaResponse.json()) as CallInfo;
+      showMediaAccess(withMedia.media, { audio: true, video: true });
+    } else {
+      const blocked = document.getElementById("media-blocked");
+      if (blocked) {
+        blocked.hidden = false;
+        blocked.textContent = "A chamada foi aceita, mas o RealtimeKit recusou a entrada.";
+      }
+    }
+  }
   if (["declined", "cancelled", "expired", "ended"].includes(info.state)) {
     window.clearInterval(pollTimer);
   }

@@ -10,9 +10,7 @@
     {
       "binding": "DB",
       "database_name": "party-audience",
-      // Placeholder: em produção, crie com `wrangler d1 create party-audience`
-      // e substitua pelo database_id real. Localmente qualquer id funciona.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "b2cf6e3e-d7b7-48b3-a3b3-86bf81d82131",
       "migrations_dir": "migrations"
     }
   ],
@@ -29,4 +27,5 @@
   //   CLOUDFLARE_ACCOUNT_ID  — conta Cloudflare (docs/media-gateway.md)
   //   REALTIMEKIT_APP_ID     — app RealtimeKit dentro da conta
   //   CLOUDFLARE_API_TOKEN   — token com permissão Realtime
+  //   RTK_PRESET_*           — sobrescritas opcionais dos presets
 }

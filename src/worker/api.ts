@@ -175,7 +175,11 @@ export async function handlePartyJoin(request: Request, user: UserRow, ctx: Ctx)
   const perms = existing ? membershipPerms(existing) : ROLE_PRESETS[role as keyof typeof ROLE_PRESETS];
   if (!existing) await ctx.db.upsertMembership(party.id, user.id, role, perms);
 
-  const media = await partyMedia(ctx, user, perms);
+  const media = await partyMedia(ctx, user, isAdmin ? "groupCallHost" : "groupCallParticipant");
+  if (media.status === "blocked") {
+    if (!existing) await ctx.db.leaveMembership(party.id, user.id);
+    return jsonError(503, "media_unavailable", { detail: media.message });
+  }
   return Response.json({
     sessionId: party.id,
     role,
@@ -185,7 +189,11 @@ export async function handlePartyJoin(request: Request, user: UserRow, ctx: Ctx)
   });
 }
 
-async function partyMedia(ctx: Ctx, user: UserRow, perms: Permissions): Promise<MediaAccess> {
+async function partyMedia(
+  ctx: Ctx,
+  user: UserRow,
+  preset: "groupCallHost" | "groupCallParticipant",
+): Promise<MediaAccess> {
   return mediaAccessFor(
     ctx.gateway,
     async () => {
@@ -196,7 +204,7 @@ async function partyMedia(ctx: Ctx, user: UserRow, perms: Permissions): Promise<
       await ctx.db.setSessionMediaRoom(MAIN_PARTY_ID, roomId);
       return roomId;
     },
-    { userId: user.id, username: user.username, perms },
+    { participantId: newId(), username: user.username, preset },
   );
 }
 
@@ -297,14 +305,15 @@ async function loadInviteFor(inviteId: string, user: UserRow, ctx: Ctx) {
   return { invite };
 }
 
-export async function handleCallGet(inviteId: string, user: UserRow, ctx: Ctx): Promise<Response> {
+export async function handleCallGet(inviteId: string, request: Request, user: UserRow, ctx: Ctx): Promise<Response> {
   const { invite, error } = await loadInviteFor(inviteId, user, ctx);
   if (error) return error;
   const caller = await ctx.db.getUserById(invite.caller_user_id);
   const callee = await ctx.db.getUserById(invite.callee_user_id);
 
   let media: MediaAccess | undefined;
-  if (invite.state === "accepted" && invite.session_id) {
+  const includeMedia = new URL(request.url).searchParams.get("media") === "1";
+  if (includeMedia && invite.state === "accepted" && invite.session_id) {
     const sessionId = invite.session_id;
     media = await mediaAccessFor(
       ctx.gateway,
@@ -316,7 +325,7 @@ export async function handleCallGet(inviteId: string, user: UserRow, ctx: Ctx): 
         await ctx.db.setSessionMediaRoom(sessionId, roomId);
         return roomId;
       },
-      { userId: user.id, username: user.username, perms: ROLE_PRESETS.call_participant },
+      { participantId: newId(), username: user.username, preset: "groupCallParticipant" },
     );
   }
   return Response.json({
@@ -334,10 +343,22 @@ export async function handleCallAccept(inviteId: string, user: UserRow, ctx: Ctx
   if (error) return error;
   if (invite.callee_user_id !== user.id) return jsonError(403, "only_callee_can_accept");
   if (invite.state !== "ringing") return jsonError(409, "invalid_state", { state: invite.state });
+  if (!ctx.gateway.configured) return jsonError(503, "media_unavailable");
 
   const sessionId = newId();
+  let roomId: string;
+  try {
+    roomId = await ctx.gateway.createRoom(`Chamada privada ${sessionId}`);
+  } catch (error) {
+    return jsonError(502, "media_unavailable", {
+      detail: error instanceof Error ? error.message : "RealtimeKit recusou a reunião",
+    });
+  }
   const moved = await ctx.db.transitionInvite(invite.id, "ringing", "accepted", sessionId);
-  if (!moved) return jsonError(409, "invalid_state");
+  if (!moved) {
+    await ctx.gateway.endRoom(roomId).catch(() => undefined);
+    return jsonError(409, "invalid_state");
+  }
 
   await ctx.db.createSession({
     id: sessionId,
@@ -345,6 +366,7 @@ export async function handleCallAccept(inviteId: string, user: UserRow, ctx: Ctx
     ownerUserId: invite.caller_user_id,
     parentSessionId: MAIN_PARTY_ID,
   });
+  await ctx.db.setSessionMediaRoom(sessionId, roomId);
   const perms = ROLE_PRESETS.call_participant;
   await ctx.db.upsertMembership(sessionId, invite.caller_user_id, "call_participant", perms);
   await ctx.db.upsertMembership(sessionId, invite.callee_user_id, "call_participant", perms);
@@ -394,7 +416,9 @@ export async function handleCallEnd(inviteId: string, user: UserRow, ctx: Ctx): 
   if (invite.state !== "accepted" || !invite.session_id) return jsonError(409, "invalid_state", { state: invite.state });
   if (!(await ctx.db.transitionInvite(invite.id, "accepted", "ended"))) return jsonError(409, "invalid_state");
 
+  const session = await ctx.db.getSession(invite.session_id);
   await ctx.db.endSession(invite.session_id);
+  if (session?.media_room_id) await ctx.gateway.endRoom(session.media_room_id);
   for (const uid of [invite.caller_user_id, invite.callee_user_id]) {
     await ctx.db.leaveMembership(invite.session_id, uid);
     await ctx.db.setUserStatus(uid, "online");
@@ -416,22 +440,33 @@ export async function handleBroadcastStart(user: UserRow, ctx: Ctx): Promise<Res
   if (channel.status === "live" && channel.current_session_id) {
     return jsonError(409, "already_live", { sessionId: channel.current_session_id });
   }
+  if (!ctx.gateway.configured) return jsonError(503, "media_unavailable");
 
   const sessionId = newId();
   await ctx.db.createSession({ id: sessionId, type: "personal_broadcast", ownerUserId: user.id });
+  let roomId: string;
+  try {
+    roomId = await ctx.gateway.createRoom(`Transmissão de ${user.username}`);
+    await ctx.db.setSessionMediaRoom(sessionId, roomId);
+  } catch (error) {
+    await ctx.db.endSession(sessionId);
+    return jsonError(502, "media_unavailable", {
+      detail: error instanceof Error ? error.message : "RealtimeKit recusou a reunião",
+    });
+  }
+  const media = await mediaAccessFor(ctx.gateway, async () => roomId, {
+    participantId: newId(),
+    username: user.username,
+    preset: "livestreamHost",
+  });
+  if (media.status === "blocked") {
+    await ctx.gateway.endRoom(roomId).catch(() => undefined);
+    await ctx.db.endSession(sessionId);
+    return jsonError(502, "media_unavailable", { detail: media.message });
+  }
   const perms = ROLE_PRESETS.broadcast_host;
   await ctx.db.upsertMembership(sessionId, user.id, "broadcast_host", perms);
   await ctx.db.setChannelLive(channel.id, sessionId);
-
-  const media = await mediaAccessFor(
-    ctx.gateway,
-    async () => {
-      const roomId = await ctx.gateway.createRoom(`Transmissão de ${user.username}`);
-      await ctx.db.setSessionMediaRoom(sessionId, roomId);
-      return roomId;
-    },
-    { userId: user.id, username: user.username, perms },
-  );
   return Response.json({ ok: true, sessionId, url: `/${channel.slug}`, media }, { status: 201 });
 }
 
@@ -455,15 +490,14 @@ export async function handleChannelGet(slug: string, request: Request, ctx: Ctx)
   const viewer = await currentUser(request, ctx.db);
 
   let media: MediaAccess | undefined;
-  if (channel.status === "live" && channel.current_session_id && viewer) {
+  if (channel.status === "live" && channel.current_session_id) {
     const sessionId = channel.current_session_id;
     const session = await ctx.db.getSession(sessionId);
-    const isHost = viewer.id === channel.owner_user_id;
-    const perms = isHost ? ROLE_PRESETS.broadcast_host : ROLE_PRESETS.broadcast_audience;
+    const isHost = viewer?.id === channel.owner_user_id;
     media = await mediaAccessFor(ctx.gateway, async () => session?.media_room_id ?? null, {
-      userId: viewer.id,
-      username: viewer.username,
-      perms,
+      participantId: newId(),
+      username: viewer?.username ?? "visitante",
+      preset: isHost ? "livestreamHost" : "livestreamViewer",
     });
   }
   return Response.json({

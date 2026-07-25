@@ -1,4 +1,6 @@
 import type { RoomServerEvent } from "../shared/api";
+import type { MediaAccess } from "../shared/api";
+import { mountRealtimeKit } from "./realtime";
 
 /** Conexão WebSocket + chat compartilhados entre festa, chamada e canal. */
 
@@ -57,21 +59,19 @@ export function showChatNotice(reason: string): void {
   }, 4000);
 }
 
-export function showMediaAccess(media: { status: string; reason?: string; message?: string } | undefined): void {
+export function showMediaAccess(
+  media: MediaAccess | undefined,
+  defaults = { audio: true, video: true },
+): void {
   const blocked = document.getElementById("media-blocked");
   if (!blocked) return;
-  if (!media || media.status === "blocked") {
+  if (!media) {
     blocked.hidden = false;
-    blocked.textContent =
-      media?.reason === "realtimekit_error"
-        ? `Mídia interativa indisponível: erro no provedor. ${media.message ?? ""}`
-        : "Mídia interativa bloqueada: o provedor RealtimeKit ainda não foi configurado. Chat e presença funcionam normalmente. " +
-          (media?.message ?? "");
-  } else {
-    // Token emitido pelo backend; a montagem do SDK do cliente é a próxima
-    // etapa verificável quando houver credenciais reais.
-    blocked.hidden = false;
-    blocked.textContent =
-      "Sala de mídia criada e token emitido pelo backend. A interface de vídeo (SDK RealtimeKit) ainda não foi integrada nesta etapa.";
+    blocked.textContent = "Vídeo indisponível: o servidor não entregou acesso à sala.";
+    return;
   }
+  void mountRealtimeKit(media, defaults).catch((error: unknown) => {
+    blocked.hidden = false;
+    blocked.textContent = `Não foi possível abrir o vídeo: ${error instanceof Error ? error.message : "erro desconhecido"}`;
+  });
 }

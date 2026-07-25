@@ -16,9 +16,6 @@ function wranglerDev(port: number, tvSource?: string): string {
 export default defineConfig({
   testDir: "e2e",
   timeout: 30_000,
-  use: {
-    launchOptions: { executablePath: "/opt/pw-browsers/chromium" },
-  },
   webServer: [
     {
       command: wranglerDev(PORTS.unconfigured),

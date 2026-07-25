@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../../src/worker/index";
 import { makeEnv } from "../helpers/env";
 
@@ -9,10 +9,22 @@ import { makeEnv } from "../helpers/env";
  */
 
 let env: ReturnType<typeof makeEnv>;
+let mediaFetch: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   env = makeEnv();
+  mediaFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/participants")) {
+      return Response.json({ success: true, data: { token: crypto.randomUUID() } });
+    }
+    if (init?.method === "PATCH") return Response.json({ success: true, data: {} });
+    return Response.json({ success: true, data: { id: crypto.randomUUID() } });
+  });
+  vi.stubGlobal("fetch", mediaFetch);
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 type Session = { cookie: string; id: string; username: string };
 
@@ -71,6 +83,19 @@ describe("Etapa 2 — identidade e slug", () => {
 });
 
 describe("Etapa 3 — festa", () => {
+  it("sem RealtimeKit não cria uma participação fantasma", async () => {
+    const alice = await signup("alice");
+    Object.assign(env, {
+      CLOUDFLARE_ACCOUNT_ID: undefined,
+      REALTIMEKIT_APP_ID: undefined,
+      CLOUDFLARE_API_TOKEN: undefined,
+    });
+
+    const response = await post("/api/party/join", {}, alice.cookie);
+    expect(response.status).toBe(503);
+    expect(env.DB.query("SELECT * FROM memberships WHERE left_at IS NULL")).toHaveLength(0);
+  });
+
   it("o primeiro a entrar é admin; os seguintes são participantes", async () => {
     const alice = await signup("alice");
     const bob = await signup("bob");
@@ -146,6 +171,19 @@ describe("Etapa 4 — chamada privada", () => {
     expect(membros).not.toContain(carol.id);
   });
 
+  it("o polling da chamada não cria participantes RealtimeKit repetidamente", async () => {
+    const { alice, bob, inviteId } = await callInProgress();
+    await post(`/api/calls/${inviteId}/accept`, undefined, bob.cookie);
+    mediaFetch.mockClear();
+
+    await req(`/api/calls/${inviteId}`, { cookie: alice.cookie });
+    await req(`/api/calls/${inviteId}`, { cookie: alice.cookie });
+    expect(mediaFetch.mock.calls.filter(([input]) => String(input).endsWith("/participants"))).toHaveLength(0);
+
+    await req(`/api/calls/${inviteId}?media=1`, { cookie: alice.cookie });
+    expect(mediaFetch.mock.calls.filter(([input]) => String(input).endsWith("/participants"))).toHaveLength(1);
+  });
+
   it("aceitar a chamada suspende a mídia na festa só de quem está na chamada", async () => {
     const { alice, bob, carol, inviteId } = await callInProgress();
     await post(`/api/calls/${inviteId}/accept`, undefined, bob.cookie);
@@ -200,6 +238,19 @@ describe("Etapa 4 — chamada privada", () => {
 });
 
 describe("Etapa 5 — transmissão pessoal", () => {
+  it("falha de mídia não declara o canal ao vivo", async () => {
+    const alice = await signup("alice");
+    mediaFetch.mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/participants")) {
+        return Response.json({ success: false, errors: [{ message: "preset inválido" }] }, { status: 400 });
+      }
+      return Response.json({ success: true, data: { id: crypto.randomUUID() } });
+    });
+
+    expect((await post("/api/broadcast/start", undefined, alice.cookie)).status).toBe(502);
+    expect(await (await req("/api/channels/alice")).json()).toMatchObject({ status: "offline" });
+  });
+
   it("o canal fica offline até o dono iniciar, e volta a offline ao encerrar", async () => {
     const alice = await signup("alice");
     expect(await (await req("/api/channels/alice")).json()).toMatchObject({ status: "offline" });

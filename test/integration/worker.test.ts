@@ -95,7 +95,7 @@ describe("páginas auxiliares", () => {
 
   it("/healthz informa o modo de TV ativo e se o banco está vinculado", async () => {
     const res = await get("/healthz", HLS_ENV);
-    expect(await res.json()).toEqual({ ok: true, tv: "hls", db: false });
+    expect(await res.json()).toEqual({ ok: true, tv: "hls", db: false, media: false });
   });
 });
 

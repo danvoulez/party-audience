@@ -12,6 +12,7 @@ interface JoinResponse {
   wsPath: string;
   media: MediaAccess;
   error?: string;
+  detail?: string;
 }
 
 let ws: WebSocket | undefined;
@@ -182,13 +183,24 @@ document.getElementById("resume-media")?.addEventListener("click", async () => {
 async function main(): Promise<void> {
   const { status, data } = await postJson<JoinResponse>("/api/party/join");
   if (status !== 200) {
-    location.href = "/login";
+    if (status === 401) {
+      location.href = "/login";
+      return;
+    }
+    const blocked = document.getElementById("media-blocked");
+    if (blocked) {
+      blocked.hidden = false;
+      blocked.textContent = data.detail ?? data.error ?? "A festa não abriu porque a mídia falhou.";
+    }
     return;
   }
   myPerms = data.perms;
   canModerate = data.perms.canModerate;
   updateResumeButton();
-  showMediaAccess(data.media);
+  showMediaAccess(data.media, {
+    audio: data.perms.canPublishAudio,
+    video: data.perms.canPublishVideo && sessionStorage.getItem("joinWithCamera") === "true",
+  });
   ws = connectRoom(data.wsPath, onEvent);
   wireChat(() => ws);
 }

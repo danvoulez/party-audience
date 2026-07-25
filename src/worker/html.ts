@@ -166,6 +166,7 @@ ${header(true)}
   <h1>Chamada privada</h1>
   <p id="call-status" role="status">Carregando…</p>
   <div id="media-blocked" class="notice" hidden></div>
+  <div id="media-area" aria-label="Vídeo da chamada"></div>
   <div class="media-controls">
     <button class="button button-primary" id="end-call" type="button" hidden>Encerrar chamada</button>
     <a class="button button-ghost" href="/festa" id="back-to-party" hidden>Voltar para a festa</a>

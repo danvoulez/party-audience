@@ -109,7 +109,7 @@ async function handleApi(request: Request, ctx: Ctx, pathname: string): Promise<
   if (method === "GET" && pathname === "/api/calls/incoming") return handleCallsIncoming(user, ctx);
   if (seg[1] === "calls" && seg.length >= 3 && seg[2] !== "incoming") {
     const inviteId = seg[2]!;
-    if (method === "GET" && seg.length === 3) return handleCallGet(inviteId, user, ctx);
+    if (method === "GET" && seg.length === 3) return handleCallGet(inviteId, request, user, ctx);
     if (method === "POST" && seg[3] === "accept") return handleCallAccept(inviteId, user, ctx);
     if (method === "POST" && seg[3] === "decline") return handleCallDecline(inviteId, user, ctx);
     if (method === "POST" && seg[3] === "cancel") return handleCallCancel(inviteId, user, ctx);
@@ -136,11 +136,7 @@ const worker = {
       return handleEvents(request);
     }
 
-    // Só a API responde 503 quando o backend não está vinculado: o cliente
-    // precisa do diagnóstico. As páginas HTML degradam pelos caminhos normais
-    // (sem DB não há sessão → /lobby e /festa mandam para /login, e qualquer
-    // slug vira 404), preservando a promessa da Etapa 1 de que uma falha gera
-    // estado controlado em vez de página quebrada.
+    // A API exige D1 e Durable Objects; páginas públicas continuam disponíveis.
     if (pathname.startsWith("/api/")) {
       if (!env.DB || !env.SESSION_ROOMS) {
         return Response.json({ error: "backend_unconfigured", detail: "D1/Durable Objects não vinculados" }, { status: 503 });
@@ -176,7 +172,12 @@ const worker = {
       }
       case "/healthz": {
         const source = parseTvSource(env.TV_SOURCE);
-        return Response.json({ ok: true, tv: resolvePlayback(source).mode, db: !!env.DB });
+        return Response.json({
+          ok: true,
+          tv: resolvePlayback(source).mode,
+          db: !!env.DB,
+          media: gatewayFromEnv(env).configured,
+        });
       }
     }
 

@@ -30,20 +30,6 @@ let passo = 0;
 const titulo = (t) => console.log(`\n\x1b[1m${++passo}. ${t}\x1b[0m`);
 const ok = (m) => console.log(`   \x1b[32m✓\x1b[0m ${m}`);
 const aviso = (m) => console.log(`   \x1b[33m!\x1b[0m ${m}`);
-const pendencias = [];
-
-function pendente(titulo, comando) {
-  pendencias.push({ titulo, comando });
-}
-
-function mostrarPendencias() {
-  if (!pendencias.length) return;
-  console.log("\n\x1b[1mPendências externas reunidas:\x1b[0m");
-  for (const [indice, item] of pendencias.entries()) {
-    console.log(`   ${indice + 1}. ${item.titulo}`);
-    if (item.comando) console.log(`      ${item.comando}`);
-  }
-}
 
 function morrer(mensagem, detalhe) {
   console.error(`\n\x1b[31m✖ ${mensagem}\x1b[0m`);
@@ -71,10 +57,6 @@ titulo("Credencial");
 let quem = null;
 if (dryRun) {
   aviso("não consultada (--dry-run); o deploy real exige autenticação");
-  pendente(
-    "Autenticar o Wrangler (ou exportar CLOUDFLARE_API_TOKEN e CLOUDFLARE_ACCOUNT_ID).",
-    "npx wrangler login",
-  );
 } else {
   quem = wrangler(["whoami"], { silencioso: true, tolerante: true });
   if (!quem || /not authenticated/i.test(quem)) {
@@ -107,7 +89,7 @@ if (skipVerify) {
   aviso("pulada por --skip-verify");
 } else {
   run("npm", ["run", "verify"], { silencioso: true });
-  ok("tipos, lint, integridade, testes e promessas — verde");
+  ok("tipos, lint e testes — verde");
 }
 
 // -------------------------------------------------------------------- 3. D1
@@ -120,7 +102,6 @@ if (databaseId && databaseId !== PLACEHOLDER_DB_ID) {
   ok(`já configurado (${databaseId})`);
 } else if (dryRun) {
   aviso(`database_id ainda é placeholder; o deploy real criaria/vincularia "${DB_NAME}"`);
-  pendente("Criar/vincular o D1 e aplicar a migration (feito automaticamente pelo deploy real).", "npm run deploy");
 } else {
   // Reaproveita o banco se ele já existir na conta; só cria quando falta.
   const lista = wrangler(["d1", "list", "--json"], { silencioso: true, tolerante: true });
@@ -143,7 +124,6 @@ if (databaseId && databaseId !== PLACEHOLDER_DB_ID) {
 
   writeFileSync("wrangler.jsonc", config.replace(PLACEHOLDER_DB_ID, databaseId));
   ok(`database_id gravado no wrangler.jsonc (${databaseId})`);
-  aviso("commite essa mudança: o placeholder era uma lacuna declarada em docs/acceptance.json");
 }
 
 // -------------------------------------------------------------- 4. migration
@@ -164,9 +144,9 @@ if (dryRun) {
   }
 }
 
-// ---------------------------------------------------- 5. o que sobe degradado
+// ------------------------------------------------------------- 5. dependências
 
-titulo("O que sobe funcionando");
+titulo("Dependências de produção");
 const segredos = dryRun
   ? ""
   : (wrangler(["secret", "list"], { silencioso: true, tolerante: true }) ?? "");
@@ -178,30 +158,29 @@ const midiaPronta = tem("CLOUDFLARE_ACCOUNT_ID") && tem("REALTIMEKIT_APP_ID") &&
 // de código. Até lá a homepage mostra o estado "não configurada".
 if (dryRun) {
   aviso("segredos não consultados (--dry-run); confirme TV_SOURCE antes do deploy");
-  pendente("Configurar a fonte real da TV, quando o parceiro fornecer o sinal.", "npx wrangler secret put TV_SOURCE");
 } else if (tem("TV_SOURCE")) {
   ok("TV 24h: fonte configurada");
 } else {
   aviso("TV 24h: encaixe pronto, mas sem sinal configurado");
-  pendente("Configurar a fonte real da TV, quando o parceiro fornecer o sinal.", "npx wrangler secret put TV_SOURCE");
 }
 
 if (dryRun) {
-  aviso("segredos não consultados (--dry-run); confirme as credenciais de mídia antes do deploy");
-  pendente(
-    "Configurar CLOUDFLARE_ACCOUNT_ID, REALTIMEKIT_APP_ID e CLOUDFLARE_API_TOKEN como secrets.",
-    "npx wrangler secret put <NOME>",
-  );
+  aviso("segredos não consultados (--dry-run); o deploy real exige RealtimeKit");
 } else if (midiaPronta) {
   ok("mídia interativa: credenciais presentes");
 } else {
-  aviso("mídia interativa: sem credenciais, áudio e vídeo sobem bloqueados (docs/media-gateway.md)");
-  pendente(
-    "Configurar CLOUDFLARE_ACCOUNT_ID, REALTIMEKIT_APP_ID e CLOUDFLARE_API_TOKEN como secrets.",
-    "npx wrangler secret put <NOME>",
+  morrer(
+    "deploy cancelado: RealtimeKit não está configurado.",
+    [
+      "Faltam um ou mais secrets:",
+      "  CLOUDFLARE_ACCOUNT_ID",
+      "  REALTIMEKIT_APP_ID",
+      "  CLOUDFLARE_API_TOKEN",
+      "",
+      "O deploy não publica festa, chamada ou transmissão sem vídeo.",
+    ].join("\n"),
   );
 }
-ok("identidade, sessões e controles sociais não dependem dos secrets de mídia");
 
 // ------------------------------------------------------------------ 6. deploy
 
@@ -210,7 +189,6 @@ if (dryRun) {
   const saida = wrangler(["deploy", "--dry-run"], { silencioso: true });
   ok("build de deploy válido");
   console.log(saida.split("\n").filter((l) => l.includes("env.") || l.includes("Total Upload")).join("\n"));
-  mostrarPendencias();
   console.log("\n\x1b[1m--dry-run: nada foi criado nem publicado.\x1b[0m");
   process.exit(0);
 }
@@ -225,7 +203,6 @@ ok(url ? `publicado em ${url}` : "publicado");
 titulo("Confirmação no ar");
 if (!url) {
   aviso("não achei a URL na saída do wrangler; confirme /healthz manualmente");
-  mostrarPendencias();
   process.exit(0);
 }
 
@@ -251,8 +228,13 @@ if (saude.db !== true) {
     JSON.stringify(saude, null, 2),
   );
 }
+if (saude.media !== true) {
+  morrer(
+    `publicado em ${url}, mas /healthz diz media:false — RealtimeKit não chegou ao Worker.`,
+    JSON.stringify(saude, null, 2),
+  );
+}
 
 ok(`/healthz responde: ${JSON.stringify(saude)}`);
 console.log(`\n\x1b[1m\x1b[32mNo ar:\x1b[0m ${url}`);
-console.log(`   TV ${tem("TV_SOURCE") ? "configurada" : "não configurada"} e mídia ${midiaPronta ? "ativa" : "bloqueada"}.`);
-mostrarPendencias();
+console.log(`   TV ${tem("TV_SOURCE") ? "configurada" : "não configurada"} e mídia ativa.`);

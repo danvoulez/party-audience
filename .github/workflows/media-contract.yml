@@ -1,8 +1,6 @@
 name: Contrato com o provedor de mídia
 
-# Roda contra a API real do RealtimeKit, sem mock. É o único mecanismo capaz de
-# detectar o provedor mudando ou descontinuando rotas sem que ninguém toque no
-# nosso código — que foi como a API legada do Dyte morreu sem aviso do CI.
+# Roda contra a API real do RealtimeKit, sem mock.
 on:
   schedule:
     - cron: "17 6 * * *"
@@ -20,42 +18,23 @@ jobs:
           cache: npm
       - run: npm ci
 
-      - name: Há credenciais?
-        id: creds
+      - name: Exigir credenciais
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           REALTIMEKIT_APP_ID: ${{ secrets.REALTIMEKIT_APP_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          if [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && [ -n "$REALTIMEKIT_APP_ID" ] && [ -n "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "tem=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "tem=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      # Sem credenciais o provedor não é contatado. Isso não é aprovado por
-      # omissão: a promessa mg.provedor-aceita-o-contrato continua 'pending' e
-      # o CI principal a lista em toda execução.
-      - name: Sem credenciais — nada foi verificado
-        if: steps.creds.outputs.tem == 'false'
-        run: |
-          echo "::warning title=Provedor não verificado::Sem CLOUDFLARE_ACCOUNT_ID / REALTIMEKIT_APP_ID / CLOUDFLARE_API_TOKEN nos secrets, nenhuma chamada real foi feita."
-          {
-            echo "## Provedor de mídia: NÃO verificado"
-            echo
-            echo "Faltam secrets, então nenhuma chamada real ao RealtimeKit foi feita."
-            echo "A mídia interativa segue sem prova de que funciona ponta a ponta."
-            echo
-            echo "Configure os secrets do repositório — ver docs/media-gateway.md."
-          } >> "$GITHUB_STEP_SUMMARY"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$REALTIMEKIT_APP_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
 
       - name: Contrato real
-        if: steps.creds.outputs.tem == 'true'
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           REALTIMEKIT_APP_ID: ${{ secrets.REALTIMEKIT_APP_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RTK_PRESET_HOST: ${{ vars.RTK_PRESET_HOST }}
           RTK_PRESET_PARTICIPANT: ${{ vars.RTK_PRESET_PARTICIPANT }}
+          RTK_PRESET_LIVESTREAM_HOST: ${{ vars.RTK_PRESET_LIVESTREAM_HOST }}
           RTK_PRESET_VIEWER: ${{ vars.RTK_PRESET_VIEWER }}
-        run: npx vitest run test/contract/media-provider.test.ts
+        run: npm run test:media

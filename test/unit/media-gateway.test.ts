@@ -1,13 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_PRESETS, RealtimeKitGateway, gatewayFromEnv } from "../../src/worker/media-gateway";
-import type { Permissions } from "../../src/shared/domain";
 
 /**
  * O gateway fala com a API atual do RealtimeKit sob a REST API da Cloudflare
  * (/accounts/{id}/realtime/kit/{appId}, Bearer token). Estes testes travam o
- * contrato de saída: URL, autenticação e — o mais importante — qual preset é
- * pedido para cada shape de permissão, já que é o preset que aplica a
- * permissão no plano de mídia.
+ * contrato de saída: URL, autenticação, envelope `data` e nomes dos presets.
  */
 
 const CREDS = {
@@ -15,16 +12,6 @@ const CREDS = {
   REALTIMEKIT_APP_ID: "app-456",
   CLOUDFLARE_API_TOKEN: "tok-789",
 };
-
-const HOST: Permissions = {
-  canPublishAudio: true,
-  canPublishVideo: true,
-  canSubscribeMedia: true,
-  canSendText: true,
-  canModerate: true,
-};
-const PARTICIPANT: Permissions = { ...HOST, canModerate: false };
-const AUDIENCE: Permissions = { ...PARTICIPANT, canPublishAudio: false, canPublishVideo: false };
 
 function mockFetch(payload: unknown, status = 200) {
   const spy = vi.fn(async () => new Response(JSON.stringify(payload), { status }));
@@ -48,7 +35,7 @@ describe("gatewayFromEnv", () => {
 
 describe("RealtimeKitGateway", () => {
   it("cria a reunião na rota da conta, com Bearer token", async () => {
-    const fetchSpy = mockFetch({ result: { id: "meet-1" } });
+    const fetchSpy = mockFetch({ success: true, data: { id: "meet-1" } });
     const gateway = new RealtimeKitGateway("acc-123", "app-456", "tok-789");
 
     expect(await gateway.createRoom("Festa principal")).toBe("meet-1");
@@ -59,25 +46,33 @@ describe("RealtimeKitGateway", () => {
     expect(JSON.parse(init.body as string)).toEqual({ title: "Festa principal" });
   });
 
-  it("lê o authToken do participante (campo novo) e o token (herança Dyte)", async () => {
+  it("lê data.token do participante", async () => {
     const gateway = new RealtimeKitGateway("a", "b", "t");
 
-    mockFetch({ result: { authToken: "novo" } });
-    expect(await gateway.createParticipantToken("m1", { userId: "u", username: "u", perms: HOST })).toBe("novo");
-
-    mockFetch({ data: { token: "legado" } });
-    expect(await gateway.createParticipantToken("m1", { userId: "u", username: "u", perms: HOST })).toBe("legado");
+    mockFetch({ success: true, data: { token: "rtk-token" } });
+    expect(
+      await gateway.createParticipantToken("m1", {
+        participantId: "u",
+        username: "u",
+        preset: "groupCallHost",
+      }),
+    ).toBe("rtk-token");
   });
 
   it.each([
-    ["quem modera vira host", HOST, DEFAULT_PRESETS.host],
-    ["quem publica sem moderar vira participante", PARTICIPANT, DEFAULT_PRESETS.participant],
-    ["quem não publica áudio nem vídeo vira audiência", AUDIENCE, DEFAULT_PRESETS.viewer],
-  ])("%s", async (_nome, perms, esperado) => {
-    const fetchSpy = mockFetch({ result: { authToken: "t" } });
+    ["host de chamada", "groupCallHost", DEFAULT_PRESETS.groupCallHost],
+    ["participante de chamada", "groupCallParticipant", DEFAULT_PRESETS.groupCallParticipant],
+    ["host de transmissão", "livestreamHost", DEFAULT_PRESETS.livestreamHost],
+    ["audiência da transmissão", "livestreamViewer", DEFAULT_PRESETS.livestreamViewer],
+  ] as const)("%s usa o preset atual", async (_nome, preset, esperado) => {
+    const fetchSpy = mockFetch({ success: true, data: { token: "t" } });
     const gateway = new RealtimeKitGateway("a", "b", "t");
 
-    await gateway.createParticipantToken("m1", { userId: "u1", username: "alice", perms });
+    await gateway.createParticipantToken("m1", {
+      participantId: "u1",
+      username: "alice",
+      preset,
+    });
 
     const [, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
     expect(JSON.parse(init.body as string)).toMatchObject({
@@ -88,17 +83,22 @@ describe("RealtimeKitGateway", () => {
   });
 
   it("nomes de preset são configuráveis, para orgs que não usam os padrões", async () => {
-    const fetchSpy = mockFetch({ result: { authToken: "t" } });
+    const fetchSpy = mockFetch({ success: true, data: { token: "t" } });
     const gateway = new RealtimeKitGateway("a", "b", "t", {
-      host: "meu_host",
-      participant: "meu_participante",
-      viewer: "minha_audiencia",
+      groupCallHost: "meu-host",
+      groupCallParticipant: "meu-participante",
+      livestreamHost: "meu-live-host",
+      livestreamViewer: "minha-audiencia",
     });
 
-    await gateway.createParticipantToken("m1", { userId: "u", username: "u", perms: AUDIENCE });
+    await gateway.createParticipantToken("m1", {
+      participantId: "u",
+      username: "u",
+      preset: "livestreamViewer",
+    });
 
     const [, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
-    expect(JSON.parse(init.body as string).preset_name).toBe("minha_audiencia");
+    expect(JSON.parse(init.body as string).preset_name).toBe("minha-audiencia");
   });
 
   it("erro do provedor vira exceção legível, sem vazar o corpo inteiro", async () => {
@@ -108,7 +108,7 @@ describe("RealtimeKitGateway", () => {
   });
 
   it("resposta 200 sem id não passa por válida", async () => {
-    mockFetch({ result: {} });
+    mockFetch({ success: true, data: {} });
     const gateway = new RealtimeKitGateway("a", "b", "t");
     await expect(gateway.createRoom("x")).rejects.toThrow(/sem id da reunião/);
   });

@@ -150,6 +150,13 @@ form input[type="text"], form input[type="password"], form input:not([type]) {
 
 .media-pane { min-width: 0; }
 #media-area { background: var(--surface); border-radius: 0.75rem; min-height: 12rem; }
+#realtimekit-meeting {
+  display: block;
+  width: 100%;
+  min-height: min(72vh, 48rem);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
 .media-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
 
 .notice {

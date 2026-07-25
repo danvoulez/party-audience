@@ -1,22 +1,19 @@
-import type { Permissions } from "../shared/domain";
 import type { MediaAccess } from "../shared/api";
 
 /**
  * Fronteira com o provedor de mídia interativa (WebRTC/SFU).
  *
- * A lógica do produto nunca fala com o RealtimeKit diretamente — só com esta
- * interface. Sem credenciais configuradas, o gateway devolve um MediaAccess
- * "blocked" com instruções exatas; nada finge funcionar.
+ * A lógica do produto usa esta interface para criar reuniões e participantes.
  */
 export interface MediaGateway {
   readonly configured: boolean;
-  /** Cria (ou reutiliza) a sala de mídia da sessão. Retorna o roomId do provedor. */
+  /** Cria a reunião no RealtimeKit. */
   createRoom(title: string): Promise<string>;
-  /** Emite token de participante amarrado à sala, ao usuário e às permissões. */
+  /** Emite um token usando um preset escolhido pelo tipo real da experiência. */
   createParticipantToken(roomId: string, participant: {
-    userId: string;
+    participantId: string;
     username: string;
-    perms: Permissions;
+    preset: MediaPreset;
   }): Promise<string>;
   endRoom(roomId: string): Promise<void>;
 }
@@ -26,23 +23,21 @@ export const REALTIMEKIT_SETUP_INSTRUCTIONS =
   "(dev: .dev.vars; produção: wrangler secret put). O token precisa da permissão Realtime. " +
   "Os presets configurados em RTK_PRESET_* devem existir no app. Ver docs/media-gateway.md.";
 
-/**
- * Presets do RealtimeKit: é o preset, definido no app, que efetivamente aplica
- * as permissões no plano de mídia. Os nomes são configuráveis porque só
- * group_call_host e group_call_participant vêm prontos em apps criados pelo
- * dashboard — o preset de audiência normalmente precisa ser criado.
- */
 export interface PresetNames {
-  host: string;
-  participant: string;
-  viewer: string;
+  groupCallHost: string;
+  groupCallParticipant: string;
+  livestreamHost: string;
+  livestreamViewer: string;
 }
 
 export const DEFAULT_PRESETS: PresetNames = {
-  host: "group_call_host",
-  participant: "group_call_participant",
-  viewer: "livestream_viewer",
+  groupCallHost: "group-call-host",
+  groupCallParticipant: "group-call-participant",
+  livestreamHost: "livestream-host",
+  livestreamViewer: "livestream-viewer",
 };
+
+export type MediaPreset = keyof PresetNames;
 
 export class UnconfiguredGateway implements MediaGateway {
   readonly configured = false;
@@ -57,16 +52,7 @@ export class UnconfiguredGateway implements MediaGateway {
   }
 }
 
-/**
- * Cloudflare RealtimeKit, API atual sob a REST API da Cloudflare.
- *
- * A API legada do Dyte (api.dyte.io/v2, Basic auth com orgId:apiKey) foi
- * descontinuada na migração para a Cloudflare: agora as rotas ficam sob
- * /accounts/{accountId}/realtime/kit/{appId} e a autenticação é por token
- * Cloudflare com permissão Realtime.
- *
- * NÃO VERIFICADO com credenciais reais neste ambiente — ver docs/media-gateway.md.
- */
+/** Cliente mínimo da API REST atual da Cloudflare RealtimeKit. */
 export class RealtimeKitGateway implements MediaGateway {
   readonly configured = true;
   private readonly base: string;
@@ -97,47 +83,40 @@ export class RealtimeKitGateway implements MediaGateway {
   }
 
   async createRoom(title: string): Promise<string> {
-    const body = await this.call<{ result?: { id: string }; data?: { id: string } }>("/meetings", {
+    const body = await this.call<{ success: boolean; data?: { id?: string } }>("/meetings", {
       method: "POST",
       body: JSON.stringify({ title }),
     });
-    // A REST API da Cloudflare embrulha em `result`; a herança Dyte usa `data`.
-    const id = body.result?.id ?? body.data?.id;
+    const id = body.data?.id;
     if (!id) throw new Error("realtimekit_error: resposta sem id da reunião");
     return id;
   }
 
   async createParticipantToken(
     roomId: string,
-    participant: { userId: string; username: string; perms: Permissions },
+    participant: { participantId: string; username: string; preset: MediaPreset },
   ): Promise<string> {
-    // O preset é quem aplica as permissões no plano de mídia; escolhemos pelo
-    // shape das permissões vindas do backend — nunca do cliente.
-    const preset = !participant.perms.canPublishAudio && !participant.perms.canPublishVideo
-      ? this.presets.viewer
-      : participant.perms.canModerate
-        ? this.presets.host
-        : this.presets.participant;
-    const body = await this.call<{
-      result?: { authToken?: string; token?: string };
-      data?: { authToken?: string; token?: string };
-    }>(`/meetings/${roomId}/participants`, {
+    const body = await this.call<{ success: boolean; data?: { token?: string } }>(
+      `/meetings/${roomId}/participants`,
+      {
       method: "POST",
       body: JSON.stringify({
         name: participant.username,
-        custom_participant_id: participant.userId,
-        preset_name: preset,
+        custom_participant_id: participant.participantId,
+        preset_name: this.presets[participant.preset],
       }),
-    });
-    const payload = body.result ?? body.data;
-    const token = payload?.authToken ?? payload?.token;
-    if (!token) throw new Error("realtimekit_error: resposta sem authToken do participante");
+      },
+    );
+    const token = body.data?.token;
+    if (!token) throw new Error("realtimekit_error: resposta sem token do participante");
     return token;
   }
 
-  async endRoom(): Promise<void> {
-    // O RealtimeKit encerra reuniões por inatividade; kick explícito de todos
-    // os participantes fica para quando houver credenciais para validar.
+  async endRoom(roomId: string): Promise<void> {
+    await this.call(`/meetings/${roomId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "INACTIVE" }),
+    });
   }
 }
 
@@ -148,6 +127,7 @@ export interface MediaEnv {
   CLOUDFLARE_API_BASE?: string;
   RTK_PRESET_HOST?: string;
   RTK_PRESET_PARTICIPANT?: string;
+  RTK_PRESET_LIVESTREAM_HOST?: string;
   RTK_PRESET_VIEWER?: string;
 }
 
@@ -160,19 +140,20 @@ export function gatewayFromEnv(env: MediaEnv): MediaGateway {
     env.REALTIMEKIT_APP_ID,
     env.CLOUDFLARE_API_TOKEN,
     {
-      host: env.RTK_PRESET_HOST ?? DEFAULT_PRESETS.host,
-      participant: env.RTK_PRESET_PARTICIPANT ?? DEFAULT_PRESETS.participant,
-      viewer: env.RTK_PRESET_VIEWER ?? DEFAULT_PRESETS.viewer,
+      groupCallHost: env.RTK_PRESET_HOST ?? DEFAULT_PRESETS.groupCallHost,
+      groupCallParticipant: env.RTK_PRESET_PARTICIPANT ?? DEFAULT_PRESETS.groupCallParticipant,
+      livestreamHost: env.RTK_PRESET_LIVESTREAM_HOST ?? DEFAULT_PRESETS.livestreamHost,
+      livestreamViewer: env.RTK_PRESET_VIEWER ?? DEFAULT_PRESETS.livestreamViewer,
     },
     env.CLOUDFLARE_API_BASE,
   );
 }
 
-/** Resolve o acesso à mídia para um participante, sem nunca lançar para a rota. */
+/** Resolve o acesso à mídia para um participante. */
 export async function mediaAccessFor(
   gateway: MediaGateway,
   ensureRoomId: () => Promise<string | null>,
-  participant: { userId: string; username: string; perms: Permissions },
+  participant: { participantId: string; username: string; preset: MediaPreset },
 ): Promise<MediaAccess> {
   if (!gateway.configured) {
     return { status: "blocked", reason: "realtimekit_unconfigured", message: REALTIMEKIT_SETUP_INSTRUCTIONS };
